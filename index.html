@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>榫卯节点拼装 · 博物馆三维展示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+            background: #1a1512;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(26, 21, 18, 0.92);
+            border: 1px solid rgba(201, 165, 122, 0.3);
+            color: #c9a57a;
+            padding: 20px 24px;
+            border-radius: 4px;
+            max-width: 320px;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+        }
+
+        #info-panel h1 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #e8d5b8;
+            letter-spacing: 2px;
+        }
+
+        #info-panel .subtitle {
+            font-size: 13px;
+            color: #8a7560;
+            margin-bottom: 16px;
+            letter-spacing: 1px;
+        }
+
+        #info-panel .controls {
+            font-size: 12px;
+            line-height: 1.8;
+            color: #a89580;
+        }
+
+        #info-panel .controls .key {
+            display: inline-block;
+            background: rgba(201, 165, 122, 0.15);
+            border: 1px solid rgba(201, 165, 122, 0.3);
+            padding: 1px 8px;
+            border-radius: 3px;
+            margin-right: 6px;
+            font-size: 11px;
+            color: #c9a57a;
+        }
+
+        #status-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(26, 21, 18, 0.92);
+            border: 1px solid rgba(201, 165, 122, 0.3);
+            color: #c9a57a;
+            padding: 14px 28px;
+            border-radius: 4px;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+            text-align: center;
+            min-width: 300px;
+        }
+
+        #status-panel .status-text {
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        #status-panel .status-text.ready {
+            color: #7ec8a0;
+        }
+
+        #status-panel .status-text.aligned {
+            color: #e8c57a;
+        }
+
+        #status-panel .status-text.snapped {
+            color: #e8a57a;
+            font-weight: 600;
+        }
+
+        #reset-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(26, 21, 18, 0.92);
+            border: 1px solid rgba(201, 165, 122, 0.3);
+            color: #c9a57a;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            letter-spacing: 1px;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        #reset-btn:hover {
+            background: rgba(201, 165, 122, 0.15);
+            border-color: rgba(201, 165, 122, 0.5);
+        }
+
+        #snap-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #e8c57a;
+            letter-spacing: 4px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+            z-index: 10;
+            text-shadow: 0 0 30px rgba(232, 197, 122, 0.5);
+        }
+
+        #snap-hint.visible {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <div id="info-panel">
+            <h1>榫卯节点拼装</h1>
+            <div class="subtitle">MORTISE &amp; TENON JOINT</div>
+            <div class="controls">
+                <div><span class="key">鼠标左键</span>拖拽移动木块</div>
+                <div><span class="key">鼠标右键</span>拖拽旋转视角</div>
+                <div><span class="key">滚轮</span>缩放视角</div>
+                <div><span class="key">Q / E</span>旋转选中木块</div>
+                <div><span class="key">空格</span>释放选中木块</div>
+            </div>
+        </div>
+
+        <div id="status-panel">
+            <div class="status-text" id="status-text">请拖拽木块进行拼装</div>
+        </div>
+
+        <button id="reset-btn">重置位置</button>
+
+        <div id="snap-hint">咔 · 榫卯相扣</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module" src="./js/main.js"></script>
+</body>
+</html>
