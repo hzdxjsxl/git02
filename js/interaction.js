@@ -66,6 +66,10 @@ export class InteractionManager {
                 }
 
                 if (obj.userData.type) {
+                    if (this.physics.snapAnimation) {
+                        return;
+                    }
+
                     if (obj.userData.snapped) {
                         this.physics.releaseSnap(obj);
                     }
@@ -94,6 +98,15 @@ export class InteractionManager {
 
     _onMouseMove(event) {
         if (this.isDragging && this.selectedPiece) {
+            if (this.physics.snapAnimation) {
+                this.isDragging = false;
+                this.selectedPiece = null;
+                if (this.onSelectionChange) {
+                    this.onSelectionChange(null);
+                }
+                return;
+            }
+
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -146,6 +159,8 @@ export class InteractionManager {
 
     _onKeyDown(event) {
         if (!this.selectedPiece) return;
+
+        if (this.physics.snapAnimation) return;
 
         if (event.key === 'q' || event.key === 'Q') {
             this.selectedPiece.rotation.y += this.rotationSpeed;

@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { getWorldConnectPoint, getWorldConnectDirection, TOLERANCE, SNAP_DISTANCE } from './geometry.js';
+import { getWorldConnectPoint, getWorldConnectDirection, TOLERANCE, SNAP_DISTANCE, TENON_SIZE, BLOCK_SIZE } from './geometry.js';
+
+const ANGLE_THRESHOLD = 0.087;
+const DOT_THRESHOLD = 0.996;
 
 export class PhysicsEngine {
     constructor() {
@@ -8,6 +11,7 @@ export class PhysicsEngine {
         this.onSnapCallback = null;
         this.onAlignCallback = null;
         this.onUnSnapCallback = null;
+        this.debugLines = null;
     }
 
     addPiece(piece) {
@@ -46,18 +50,63 @@ export class PhysicsEngine {
             const otherDir = getWorldConnectDirection(other);
 
             const distance = piecePoint.distanceTo(otherPoint);
-            const directionDot = pieceDir.dot(otherDir);
 
-            if (distance < TOLERANCE.position && directionDot < -0.8) {
+            const axisLine = new THREE.Vector3().subVectors(otherPoint, piecePoint).normalize();
+
+            const pieceAxisDot = Math.abs(pieceDir.dot(axisLine));
+            const otherAxisDot = Math.abs(otherDir.dot(axisLine));
+
+            const facingDot = pieceDir.dot(otherDir);
+
+            const axisAligned = pieceAxisDot > DOT_THRESHOLD && otherAxisDot > DOT_THRESHOLD;
+
+            const facingEachOther = facingDot < -0.95;
+
+            const eulerPiece = new THREE.Euler().setFromQuaternion(piece.quaternion, 'YXZ');
+            const eulerOther = new THREE.Euler().setFromQuaternion(other.quaternion, 'YXZ');
+
+            const yawDiff = Math.abs(
+                this._normalizeAngle(eulerPiece.y) - this._normalizeAngle(eulerOther.y)
+            );
+            const pitchDiff = Math.abs(
+                this._normalizeAngle(eulerPiece.x) - this._normalizeAngle(eulerOther.x)
+            );
+            const rollDiff = Math.abs(
+                this._normalizeAngle(eulerPiece.z) - this._normalizeAngle(eulerOther.z)
+            );
+
+            const rotationAligned =
+                yawDiff < ANGLE_THRESHOLD &&
+                pitchDiff < ANGLE_THRESHOLD &&
+                rollDiff < ANGLE_THRESHOLD;
+
+            const tenonLength = TENON_SIZE.depth;
+            const maxSnapDistance = tenonLength * 1.5;
+
+            const closeEnough = distance < maxSnapDistance;
+
+            const canSnap = axisAligned && facingEachOther && rotationAligned && closeEnough;
+
+            if (canSnap) {
                 return {
                     target: other,
                     distance: distance,
-                    dot: directionDot
+                    facingDot: facingDot,
+                    axisAligned: axisAligned,
+                    facingEachOther: facingEachOther,
+                    rotationAligned: rotationAligned
                 };
             }
         }
 
         return null;
+    }
+
+    _normalizeAngle(angle) {
+        let normalized = angle % (Math.PI * 2);
+        if (normalized > Math.PI) normalized -= Math.PI * 2;
+        if (normalized < -Math.PI) normalized += Math.PI * 2;
+        return normalized;
     }
 
     checkSnapReady(piece) {
@@ -84,24 +133,23 @@ export class PhysicsEngine {
 
         const currentQuat = piece.quaternion.clone();
 
-        const rotationQuat = new THREE.Quaternion().setFromAxisAngle(
-            new THREE.Vector3(0, 1, 0),
-            Math.PI
-        );
-        const finalQuat = target.quaternion.clone().multiply(rotationQuat);
+        const targetEuler = new THREE.Euler().setFromQuaternion(target.quaternion, 'YXZ');
+        targetEuler.y += Math.PI;
+        const finalQuat = new THREE.Quaternion().setFromEuler(targetEuler);
 
         const startPos = piece.position.clone();
 
         if (animate) {
             this.snapAnimation = {
                 piece: piece,
+                target: target,
                 startPos: startPos,
                 endPos: targetPosition,
                 startQuat: currentQuat,
                 endQuat: finalQuat,
                 progress: 0,
-                duration: 0.3,
-                target: target
+                duration: 0.6,
+                phase: 'locking'
             };
         } else {
             piece.position.copy(targetPosition);
@@ -119,6 +167,17 @@ export class PhysicsEngine {
         target.userData.snapped = true;
         piece.userData.snapTarget = target;
         target.userData.snapTarget = piece;
+
+        if (!piece.userData.snapGroup) {
+            const snapGroup = new THREE.Group();
+            snapGroup.name = 'snap-group';
+
+            piece.userData.snapGroup = snapGroup;
+            target.userData.snapGroup = snapGroup;
+
+            piece.userData.groupOffset = piece.position.clone();
+            target.userData.groupOffset = target.position.clone();
+        }
     }
 
     releaseSnap(piece) {
@@ -133,6 +192,11 @@ export class PhysicsEngine {
             target.userData.snapTarget = null;
         }
 
+        if (piece.userData.snapGroup) {
+            piece.userData.snapGroup = null;
+            target.userData.snapGroup = null;
+        }
+
         if (this.onUnSnapCallback) {
             this.onUnSnapCallback(piece, target);
         }
@@ -143,15 +207,29 @@ export class PhysicsEngine {
             const anim = this.snapAnimation;
             anim.progress += deltaTime / anim.duration;
 
-            if (anim.progress >= 1) {
-                anim.progress = 1;
-                this._completeSnap(anim.piece, anim.target);
-                this.snapAnimation = null;
-            }
+            if (anim.phase === 'locking') {
+                const t = Math.min(anim.progress * 2.5, 1);
+                const easedT = this._easeOutCubic(t);
 
-            const t = this._easeOutCubic(anim.progress);
-            anim.piece.position.lerpVectors(anim.startPos, anim.endPos, t);
-            anim.piece.quaternion.slerpQuaternions(anim.startQuat, anim.endQuat, t);
+                anim.piece.quaternion.slerpQuaternions(anim.startQuat, anim.endQuat, easedT);
+
+                if (anim.progress >= 0.35) {
+                    anim.phase = 'sliding';
+                    anim.slideStartPos = anim.piece.position.clone();
+                }
+            } else if (anim.phase === 'sliding') {
+                const slideProgress = Math.min((anim.progress - 0.35) / 0.65, 1);
+                const easedSlide = this._easeInOutCubic(slideProgress);
+
+                anim.piece.position.lerpVectors(anim.slideStartPos, anim.endPos, easedSlide);
+
+                if (anim.progress >= 1) {
+                    anim.piece.position.copy(anim.endPos);
+                    anim.piece.quaternion.copy(anim.endQuat);
+                    this._completeSnap(anim.piece, anim.target);
+                    this.snapAnimation = null;
+                }
+            }
         }
     }
 
@@ -159,7 +237,17 @@ export class PhysicsEngine {
         return 1 - Math.pow(1 - t, 3);
     }
 
+    _easeInOutCubic(t) {
+        return t < 0.5
+            ? 4 * t * t * t
+            : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
     getAlignmentStatus(piece) {
+        if (piece.userData.snapped) {
+            return { status: 'snapped', distance: 0, angle: 0, target: piece.userData.snapTarget };
+        }
+
         const alignment = this.checkAlignment(piece);
         if (!alignment) return { status: 'none', distance: Infinity, angle: 0 };
 
@@ -168,14 +256,11 @@ export class PhysicsEngine {
         const angle = Math.acos(Math.abs(pieceDir.dot(targetDir))) * (180 / Math.PI);
 
         let status = 'far';
-        if (alignment.distance < TOLERANCE.position) {
+        if (alignment.axisAligned && alignment.facingEachOther) {
             status = 'aligned';
         }
-        if (alignment.distance < SNAP_DISTANCE) {
+        if (alignment.rotationAligned && alignment.distance < SNAP_DISTANCE * 2) {
             status = 'ready';
-        }
-        if (piece.userData.snapped) {
-            status = 'snapped';
         }
 
         return {

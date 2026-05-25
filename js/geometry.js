@@ -66,6 +66,7 @@ export function createTenonPiece() {
 
     group.userData.connectDirection = new THREE.Vector3(1, 0, 0);
 
+    group.userData.originalPosition = new THREE.Vector3(-3, 0, 0);
     group.position.copy(group.userData.originalPosition);
 
     return group;
@@ -175,7 +176,7 @@ export function createMortisePiece() {
     group.add(holeFront);
 
     group.userData.connectPoint = new THREE.Vector3(
-        -BLOCK_SIZE.width / 2 - TENON_SIZE.depth - 0.3,
+        -BLOCK_SIZE.width / 2 + 0.1,
         0,
         0
     );

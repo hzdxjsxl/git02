@@ -60,12 +60,12 @@ class App {
     }
 
     _createHighlightHelper() {
-        const boxGeo = new THREE.BoxGeometry(2.5, 2.5, 2.5);
+        const boxGeo = new THREE.BoxGeometry(2.8, 2.8, 2.8);
         const edges = new THREE.EdgesGeometry(boxGeo);
         const lineMaterial = new THREE.LineBasicMaterial({
             color: 0xe8c57a,
             transparent: true,
-            opacity: 0.8
+            opacity: 0.9
         });
         this.highlightHelper = new THREE.LineSegments(edges, lineMaterial);
         this.highlightHelper.visible = false;
@@ -87,19 +87,19 @@ class App {
 
         switch (status.status) {
             case 'snapped':
-                statusText.textContent = '榫卯相扣 · 拼合完成';
+                statusText.textContent = '榫卯相扣 · 刚性锁死完成';
                 statusText.className = 'status-text snapped';
                 break;
             case 'ready':
-                statusText.textContent = `吸附就绪 · 距离: ${status.distance.toFixed(2)}`;
+                statusText.textContent = `吸附就绪 · 轴线已对齐 · 距离: ${status.distance.toFixed(3)}`;
                 statusText.className = 'status-text ready';
                 break;
             case 'aligned':
-                statusText.textContent = `方向已对准 · 继续移动`;
+                statusText.textContent = `方向已对准 · 继续靠近`;
                 statusText.className = 'status-text aligned';
                 break;
             default:
-                statusText.textContent = '请拖拽木块进行拼装';
+                statusText.textContent = '请拖拽木块进行拼装 · 需面对面轴线对齐';
                 statusText.className = 'status-text';
         }
     }
@@ -111,7 +111,7 @@ class App {
         }, 1500);
 
         const statusText = document.getElementById('status-text');
-        statusText.textContent = '榫卯相扣 · 拼合完成';
+        statusText.textContent = '榫卯相扣 · 刚性锁死完成';
         statusText.className = 'status-text snapped';
 
         this.highlightHelper.visible = false;
@@ -119,7 +119,7 @@ class App {
 
     _onUnSnap(piece, target) {
         const statusText = document.getElementById('status-text');
-        statusText.textContent = '请拖拽木块进行拼装';
+        statusText.textContent = '请拖拽木块进行拼装 · 需面对面轴线对齐';
         statusText.className = 'status-text';
     }
 
@@ -142,7 +142,7 @@ class App {
         this.highlightHelper.visible = false;
 
         const statusText = document.getElementById('status-text');
-        statusText.textContent = '请拖拽木块进行拼装';
+        statusText.textContent = '请拖拽木块进行拼装 · 需面对面轴线对齐';
         statusText.className = 'status-text';
 
         this.interaction.resetCamera();
@@ -153,12 +153,14 @@ class App {
 
         this.physics.update(delta);
 
+        this.renderer.updateShadowCamera(this.physics.pieces);
+
         if (this.interaction.selectedPiece && !this.interaction.selectedPiece.userData.snapped) {
             const status = this.physics.getAlignmentStatus(this.interaction.selectedPiece);
             this._updateStatus(status);
         }
 
-        if (this.highlightHelper.visible) {
+        if (this.highlightHelper.visible && this.interaction.selectedPiece) {
             this.highlightHelper.position.copy(this.interaction.selectedPiece.position);
             this.highlightHelper.rotation.copy(this.interaction.selectedPiece.rotation);
         }
