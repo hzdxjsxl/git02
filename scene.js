@@ -13,6 +13,8 @@ const MOON_DISPLAY_RADIUS = MOON_RADIUS * SCALE * 3;
 
 const EARTH_POSITION_SCALE = 1 / 5000000;
 
+const PROBE_SCALE = 5;
+
 function worldToDisplay(worldPos) {
     return new THREE.Vector3(
         worldPos[0] * EARTH_POSITION_SCALE,
@@ -80,12 +82,13 @@ function createEarth() {
 
     const earth = new THREE.Mesh(geometry, material);
 
-    const atmosphereGeometry = new THREE.SphereGeometry(EARTH_DISPLAY_RADIUS * 1.05, 64, 64);
+    const atmosphereGeometry = new THREE.SphereGeometry(EARTH_DISPLAY_RADIUS * 1.08, 64, 64);
     const atmosphereMaterial = new THREE.MeshPhongMaterial({
         color: 0x4488ff,
         transparent: true,
-        opacity: 0.2,
-        side: THREE.BackSide
+        opacity: 0.15,
+        side: THREE.BackSide,
+        depthWrite: false
     });
     const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
     earth.add(atmosphere);
@@ -148,54 +151,112 @@ function createMoon() {
 function createProbe() {
     const group = new THREE.Group();
 
-    const bodyGeometry = new THREE.ConeGeometry(0.3, 1, 8);
-    const bodyMaterial = new THREE.MeshPhongMaterial({
-        color: 0xcccccc,
-        shininess: 100,
+    const mainBodyGeom = new THREE.CylinderGeometry(0.8 * PROBE_SCALE, 1.0 * PROBE_SCALE, 2.5 * PROBE_SCALE, 12);
+    const mainBodyMat = new THREE.MeshPhongMaterial({
+        color: 0xe8e8e8,
+        shininess: 80,
         specular: 0xffffff
     });
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.rotation.x = Math.PI / 2;
-    group.add(body);
+    const mainBody = new THREE.Mesh(mainBodyGeom, mainBodyMat);
+    mainBody.rotation.x = Math.PI / 2;
+    group.add(mainBody);
 
-    const solarGeometry = new THREE.BoxGeometry(0.1, 2, 0.02);
-    const solarMaterial = new THREE.MeshPhongMaterial({
-        color: 0x2244aa,
-        shininess: 50
+    const noseGeom = new THREE.ConeGeometry(0.8 * PROBE_SCALE, 1.2 * PROBE_SCALE, 12);
+    const noseMat = new THREE.MeshPhongMaterial({
+        color: 0xff6644,
+        shininess: 100,
+        specular: 0xffaaaa
     });
-    const solarLeft = new THREE.Mesh(solarGeometry, solarMaterial);
-    solarLeft.position.x = -1.2;
-    solarLeft.position.y = 0.3;
+    const nose = new THREE.Mesh(noseGeom, noseMat);
+    nose.position.z = 1.85 * PROBE_SCALE;
+    group.add(nose);
+
+    const engineGeom = new THREE.CylinderGeometry(0.5 * PROBE_SCALE, 0.7 * PROBE_SCALE, 0.8 * PROBE_SCALE, 8);
+    const engineMat = new THREE.MeshPhongMaterial({
+        color: 0x666666,
+        shininess: 60
+    });
+    const engine = new THREE.Mesh(engineGeom, engineMat);
+    engine.position.z = -1.65 * PROBE_SCALE;
+    engine.rotation.x = Math.PI / 2;
+    group.add(engine);
+
+    const solarPanelGeom = new THREE.BoxGeometry(4 * PROBE_SCALE, 0.1 * PROBE_SCALE, 1.2 * PROBE_SCALE);
+    const solarPanelMat = new THREE.MeshPhongMaterial({
+        color: 0x2244aa,
+        shininess: 30
+    });
+    const solarLeft = new THREE.Mesh(solarPanelGeom, solarPanelMat);
+    solarLeft.position.set(-2.5 * PROBE_SCALE, 0, 0);
     group.add(solarLeft);
 
-    const solarRight = new THREE.Mesh(solarGeometry, solarMaterial);
-    solarRight.position.x = 1.2;
-    solarRight.position.y = 0.3;
+    const solarRight = new THREE.Mesh(solarPanelGeom, solarPanelMat);
+    solarRight.position.set(2.5 * PROBE_SCALE, 0, 0);
     group.add(solarRight);
 
-    const dishGeometry = new THREE.SphereGeometry(0.4, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-    const dishMaterial = new THREE.MeshPhongMaterial({
+    const panelFrameGeom = new THREE.BoxGeometry(4.2 * PROBE_SCALE, 0.15 * PROBE_SCALE, 0.15 * PROBE_SCALE);
+    const panelFrameMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+
+    const frameTop1 = new THREE.Mesh(panelFrameGeom, panelFrameMat);
+    frameTop1.position.set(-2.5 * PROBE_SCALE, 0, 0.65 * PROBE_SCALE);
+    group.add(frameTop1);
+
+    const frameBot1 = new THREE.Mesh(panelFrameGeom, panelFrameMat);
+    frameBot1.position.set(-2.5 * PROBE_SCALE, 0, -0.65 * PROBE_SCALE);
+    group.add(frameBot1);
+
+    const frameTop2 = new THREE.Mesh(panelFrameGeom, panelFrameMat);
+    frameTop2.position.set(2.5 * PROBE_SCALE, 0, 0.65 * PROBE_SCALE);
+    group.add(frameTop2);
+
+    const frameBot2 = new THREE.Mesh(panelFrameGeom, panelFrameMat);
+    frameBot2.position.set(2.5 * PROBE_SCALE, 0, -0.65 * PROBE_SCALE);
+    group.add(frameBot2);
+
+    const dishGeom = new THREE.SphereGeometry(0.8 * PROBE_SCALE, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const dishMat = new THREE.MeshPhongMaterial({
         color: 0xdddddd,
-        shininess: 80
+        shininess: 80,
+        side: THREE.DoubleSide
     });
-    const dish = new THREE.Mesh(dishGeometry, dishMaterial);
-    dish.position.y = -0.6;
-    dish.rotation.x = Math.PI;
+    const dish = new THREE.Mesh(dishGeom, dishMat);
+    dish.position.set(0, -1.0 * PROBE_SCALE, -0.3 * PROBE_SCALE);
+    dish.rotation.x = Math.PI / 2;
     group.add(dish);
 
-    const glowGeometry = new THREE.SphereGeometry(0.8, 16, 16);
-    const glowMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffff00,
+    const dishStemGeom = new THREE.CylinderGeometry(0.08 * PROBE_SCALE, 0.08 * PROBE_SCALE, 1.0 * PROBE_SCALE, 6);
+    const dishStemMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
+    const dishStem = new THREE.Mesh(dishStemGeom, dishStemMat);
+    dishStem.position.set(0, -0.5 * PROBE_SCALE, -0.3 * PROBE_SCALE);
+    dishStem.rotation.x = Math.PI / 2;
+    group.add(dishStem);
+
+    const glowGeom = new THREE.SphereGeometry(1.5 * PROBE_SCALE, 16, 16);
+    const glowMat = new THREE.MeshBasicMaterial({
+        color: 0x66aaff,
         transparent: true,
-        opacity: 0.3
+        opacity: 0.15,
+        depthWrite: false
     });
-    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    const glow = new THREE.Mesh(glowGeom, glowMat);
     group.add(glow);
+
+    const engineGlowGeom = new THREE.ConeGeometry(0.6 * PROBE_SCALE, 1.5 * PROBE_SCALE, 8);
+    const engineGlowMat = new THREE.MeshBasicMaterial({
+        color: 0xff8844,
+        transparent: true,
+        opacity: 0.0,
+        depthWrite: false
+    });
+    const engineGlow = new THREE.Mesh(engineGlowGeom, engineGlowMat);
+    engineGlow.position.set(0, 0, -2.5 * PROBE_SCALE);
+    engineGlow.rotation.x = -Math.PI / 2;
+    group.add(engineGlow);
 
     return group;
 }
 
-function createTrajectoryLine(maxPoints = 10000) {
+function createTrajectoryLine(maxPoints = 50000) {
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(maxPoints * 3);
     const colors = new Float32Array(maxPoints * 3);
@@ -208,7 +269,7 @@ function createTrajectoryLine(maxPoints = 10000) {
         vertexColors: true,
         linewidth: 2,
         transparent: true,
-        opacity: 0.9
+        opacity: 0.95
     });
 
     return new THREE.Line(geometry, material);
@@ -236,32 +297,46 @@ function createOrbitRing(radius, color = 0x444488, segments = 128) {
     return new THREE.Line(geometry, material);
 }
 
-function createStarField(count = 3000) {
+function createStarField(count = 5000) {
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
+    const colors = new Float32Array(count * 3);
 
     for (let i = 0; i < count; i++) {
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
-        const radius = 200 + Math.random() * 50;
+        const radius = 300 + Math.random() * 100;
 
         positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
         positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
         positions[i * 3 + 2] = radius * Math.cos(phi);
 
-        sizes[i] = Math.random() * 2 + 0.5;
+        const brightness = 0.5 + Math.random() * 0.5;
+        const tint = Math.random();
+        if (tint < 0.2) {
+            colors[i * 3] = brightness * 0.8;
+            colors[i * 3 + 1] = brightness * 0.9;
+            colors[i * 3 + 2] = brightness;
+        } else if (tint < 0.3) {
+            colors[i * 3] = brightness;
+            colors[i * 3 + 1] = brightness * 0.8;
+            colors[i * 3 + 2] = brightness * 0.7;
+        } else {
+            colors[i * 3] = brightness;
+            colors[i * 3 + 1] = brightness;
+            colors[i * 3 + 2] = brightness;
+        }
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-        color: 0xffffff,
-        size: 0.5,
+        size: 0.8,
         sizeAttenuation: true,
         transparent: true,
-        opacity: 0.8
+        opacity: 0.9,
+        vertexColors: true
     });
 
     return new THREE.Points(geometry, material);
@@ -276,6 +351,7 @@ export {
     EARTH_DISPLAY_RADIUS,
     MOON_DISPLAY_RADIUS,
     EARTH_POSITION_SCALE,
+    PROBE_SCALE,
     worldToDisplay,
     createEarth,
     createMoon,

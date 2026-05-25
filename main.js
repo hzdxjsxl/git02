@@ -24,7 +24,8 @@ import {
     createTrajectoryLine,
     createOrbitRing,
     createStarField,
-    createMoonOrbitLine
+    createMoonOrbitLine,
+    PROBE_SCALE
 } from './scene.js';
 
 import {
@@ -52,7 +53,7 @@ let isPaused = false;
 let timeScale = 1;
 let cameraMode = 0;
 
-const MAX_TRAJECTORY_POINTS = 20000;
+const MAX_TRAJECTORY_POINTS = 50000;
 let trajectoryPointCount = 0;
 let lastTrajectoryUpdate = 0;
 
@@ -69,6 +70,7 @@ function init() {
     const container = document.getElementById('canvas-container');
 
     scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000008);
 
     camera = new THREE.PerspectiveCamera(
         60,
@@ -87,18 +89,22 @@ function init() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.minDistance = 5;
-    controls.maxDistance = 200;
+    controls.maxDistance = 300;
 
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
     scene.add(ambientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 2);
     sunLight.position.set(50, 30, 50);
     scene.add(sunLight);
 
-    const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+    const fillLight = new THREE.DirectionalLight(0x8888ff, 0.4);
     fillLight.position.set(-50, -20, -50);
     scene.add(fillLight);
+
+    const rimLight = new THREE.DirectionalLight(0xffaa44, 0.3);
+    rimLight.position.set(0, 50, -50);
+    scene.add(rimLight);
 
     starField = createStarField(5000);
     scene.add(starField);
@@ -118,7 +124,7 @@ function init() {
     moonOrbitLine = createMoonOrbitLine();
     scene.add(moonOrbitLine);
 
-    parkingOrbitLine = createOrbitRing(EARTH_RADIUS + 300000, 0x4488ff, 64);
+    parkingOrbitLine = createOrbitRing(EARTH_RADIUS + 300000, 0x4488ff, 128);
     scene.add(parkingOrbitLine);
 
     probeState = createProbeState(300000);
@@ -195,14 +201,14 @@ function resetMission() {
 }
 
 function changeSpeed() {
-    const speeds = [1, 2, 5, 10, 20, 50];
+    const speeds = [1, 2, 5, 10, 20, 50, 100];
     const currentIndex = speeds.indexOf(timeScale);
     timeScale = speeds[(currentIndex + 1) % speeds.length];
     document.getElementById('btn-speed-up').textContent = `⏩ 加速 ${timeScale}x`;
 }
 
 function changeCamera() {
-    cameraMode = (cameraMode + 1) % 3;
+    cameraMode = (cameraMode + 1) % 4;
     switch (cameraMode) {
         case 0:
             controls.target.set(0, 0, 0);
@@ -210,7 +216,7 @@ function changeCamera() {
             break;
         case 1:
             controls.target.set(0, 0, 0);
-            camera.position.set(0, 60, 0);
+            camera.position.set(0, 80, 0.1);
             break;
         case 2:
             controls.target.set(
@@ -219,9 +225,19 @@ function changeCamera() {
                 probe.position.z
             );
             camera.position.set(
-                probe.position.x + 10,
-                probe.position.y + 10,
-                probe.position.z + 10
+                probe.position.x + 15,
+                probe.position.y + 15,
+                probe.position.z + 15
+            );
+            break;
+        case 3:
+            const moonPos = getMoonPosition(simulationTime);
+            const moonDisplay = worldToDisplay(moonPos);
+            controls.target.copy(moonDisplay);
+            camera.position.set(
+                moonDisplay.x + 15,
+                moonDisplay.y + 15,
+                moonDisplay.z + 15
             );
             break;
     }
@@ -232,7 +248,7 @@ function updatePhysics(dt) {
 
     const scaledDt = dt * timeScale;
 
-    const subSteps = Math.ceil(scaledDt / 60);
+    const subSteps = Math.max(1, Math.ceil(scaledDt / 30));
     const subDt = scaledDt / subSteps;
 
     for (let i = 0; i < subSteps; i++) {
@@ -270,10 +286,11 @@ function updatePhysics(dt) {
 function updateTrajectory() {
     if (!isRunning) return;
 
-    if (simulationTime - lastTrajectoryUpdate < 100) return;
-    lastTrajectoryUpdate = simulationTime;
-
     if (trajectoryPointCount >= MAX_TRAJECTORY_POINTS) return;
+
+    const minInterval = 50;
+    if (simulationTime - lastTrajectoryUpdate < minInterval) return;
+    lastTrajectoryUpdate = simulationTime;
 
     const displayPos = worldToDisplay(probeState.position);
     const positions = trajectoryLine.geometry.attributes.position.array;
@@ -307,28 +324,24 @@ function updateVisuals() {
     const probeDisplayPos = worldToDisplay(probeState.position);
     probe.position.copy(probeDisplayPos);
 
-    if (vec3Length(probeState.velocity) > 0) {
-        const velocityDir = new THREE.Vector3(
-            probeState.velocity[0],
-            probeState.velocity[2],
-            probeState.velocity[1]
-        ).normalize();
-
-        const lookTarget = probe.position.clone().add(velocityDir);
-        probe.lookAt(lookTarget);
-    }
-
     const earthRotation = (currentTime / 86400) * Math.PI * 2;
     earth.rotation.y = earthRotation;
 
+    const moonRotation = (currentTime / 2360000) * Math.PI * 2;
+    moon.rotation.y = moonRotation;
+
     if (cameraMode === 2) {
         controls.target.copy(probe.position);
+    } else if (cameraMode === 3) {
+        controls.target.copy(moon.position);
     }
 
     if (missionController.thrustActive) {
-        probe.children[4].material.opacity = 0.6;
+        probe.children[9].material.opacity = 0.7;
+        probe.children[8].material.opacity = 0.3;
     } else {
-        probe.children[4].material.opacity = 0.3;
+        probe.children[9].material.opacity = 0.0;
+        probe.children[8].material.opacity = 0.15;
     }
 }
 
