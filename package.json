@@ -1,0 +1,13 @@
+{
+  "name": "dispatch-dashboard",
+  "version": "1.0.0",
+  "description": "同城派单全栈后台 - 实时二分图匹配与热区渲染",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}

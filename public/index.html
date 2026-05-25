@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>同城派单实时调度后台</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>🚚 同城派单 · 实时调度中台</h1>
+    <div class="status">
+      <span id="connStatus" class="dot offline"></span>
+      <span id="connText">连接中...</span>
+      <span class="sep">|</span>
+      <span>订单: <b id="orderCount">0</b></span>
+      <span class="sep">|</span>
+      <span>骑手: <b id="courierCount">0</b></span>
+      <span class="sep">|</span>
+      <span>匹配耗时: <b id="matchTime">0</b> ms</span>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="map-wrap">
+      <canvas id="mapCanvas" width="1000" height="700"></canvas>
+      <div class="legend">
+        <div><span class="sw courier"></span>骑手</div>
+        <div><span class="sw order"></span>订单</div>
+        <div><span class="sw match"></span>派单连线</div>
+        <div><span class="sw hot"></span>加价热区</div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card">
+        <h3>派单结果</h3>
+        <div id="matchList" class="match-list"></div>
+      </div>
+      <div class="card">
+        <h3>加价热区</h3>
+        <div id="hotList" class="hot-list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="js/matcher.js"></script>
+  <script src="js/heatmap.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
