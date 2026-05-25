@@ -12,6 +12,7 @@ import {
     vec3Scale,
     vec3Add,
     vec3Distance,
+    vec3Dot,
     getMoonPosition,
     getMoonVelocity,
     createProbeState

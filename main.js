@@ -17,6 +17,7 @@ import {
 } from './physics.js';
 
 import {
+    WORLD_DISPLAY_SCALE,
     worldToDisplay,
     createEarth,
     createMoon,
@@ -76,9 +77,9 @@ function init() {
         60,
         window.innerWidth / window.innerHeight,
         0.1,
-        1000
+        3000
     );
-    camera.position.set(0, 30, 60);
+    camera.position.set(0, 40, 80);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -89,24 +90,24 @@ function init() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.minDistance = 5;
-    controls.maxDistance = 300;
+    controls.maxDistance = 1500;
 
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.7);
     scene.add(ambientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xffffff, 2);
-    sunLight.position.set(50, 30, 50);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    sunLight.position.set(100, 60, 100);
     scene.add(sunLight);
 
-    const fillLight = new THREE.DirectionalLight(0x8888ff, 0.4);
-    fillLight.position.set(-50, -20, -50);
+    const fillLight = new THREE.DirectionalLight(0x8888ff, 0.5);
+    fillLight.position.set(-100, -40, -100);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xffaa44, 0.3);
-    rimLight.position.set(0, 50, -50);
+    const rimLight = new THREE.DirectionalLight(0xffaa44, 0.4);
+    rimLight.position.set(0, 100, -100);
     scene.add(rimLight);
 
-    starField = createStarField(5000);
+    starField = createStarField(8000);
     scene.add(starField);
 
     earth = createEarth();
@@ -194,6 +195,10 @@ function resetMission() {
     document.getElementById('btn-pause').textContent = '⏸ 暂停';
     document.getElementById('btn-speed-up').textContent = '⏩ 加速 1x';
 
+    cameraMode = 0;
+    controls.target.set(0, 0, 0);
+    camera.position.set(0, 40, 80);
+
     updateInfoDisplay();
     updateVisuals();
     lastPhase = -1;
@@ -201,43 +206,49 @@ function resetMission() {
 }
 
 function changeSpeed() {
-    const speeds = [1, 2, 5, 10, 20, 50, 100];
+    const speeds = [1, 2, 5, 10, 20, 50, 100, 200];
     const currentIndex = speeds.indexOf(timeScale);
     timeScale = speeds[(currentIndex + 1) % speeds.length];
     document.getElementById('btn-speed-up').textContent = `⏩ 加速 ${timeScale}x`;
 }
 
 function changeCamera() {
-    cameraMode = (cameraMode + 1) % 4;
+    cameraMode = (cameraMode + 1) % 5;
+    const probePos = probe.position;
+    const moonPos = moon.position;
+
     switch (cameraMode) {
         case 0:
             controls.target.set(0, 0, 0);
-            camera.position.set(0, 30, 60);
+            camera.position.set(0, 40, 80);
             break;
         case 1:
             controls.target.set(0, 0, 0);
-            camera.position.set(0, 80, 0.1);
+            camera.position.set(0, 120, 1);
             break;
         case 2:
-            controls.target.set(
-                probe.position.x,
-                probe.position.y,
-                probe.position.z
-            );
+            controls.target.copy(probePos);
             camera.position.set(
-                probe.position.x + 15,
-                probe.position.y + 15,
-                probe.position.z + 15
+                probePos.x + 10,
+                probePos.y + 10,
+                probePos.z + 10
             );
             break;
         case 3:
-            const moonPos = getMoonPosition(simulationTime);
-            const moonDisplay = worldToDisplay(moonPos);
-            controls.target.copy(moonDisplay);
+            controls.target.copy(moonPos);
             camera.position.set(
-                moonDisplay.x + 15,
-                moonDisplay.y + 15,
-                moonDisplay.z + 15
+                moonPos.x + 20,
+                moonPos.y + 20,
+                moonPos.z + 20
+            );
+            break;
+        case 4:
+            const midPoint = new THREE.Vector3().addVectors(probePos, moonPos).multiplyScalar(0.5);
+            controls.target.copy(midPoint);
+            camera.position.set(
+                midPoint.x + 50,
+                midPoint.y + 50,
+                midPoint.z + 50
             );
             break;
     }
@@ -288,7 +299,7 @@ function updateTrajectory() {
 
     if (trajectoryPointCount >= MAX_TRAJECTORY_POINTS) return;
 
-    const minInterval = 50;
+    const minInterval = 30;
     if (simulationTime - lastTrajectoryUpdate < minInterval) return;
     lastTrajectoryUpdate = simulationTime;
 
@@ -334,14 +345,17 @@ function updateVisuals() {
         controls.target.copy(probe.position);
     } else if (cameraMode === 3) {
         controls.target.copy(moon.position);
+    } else if (cameraMode === 4) {
+        const midPoint = new THREE.Vector3().addVectors(probe.position, moon.position).multiplyScalar(0.5);
+        controls.target.copy(midPoint);
     }
 
     if (missionController.thrustActive) {
-        probe.children[9].material.opacity = 0.7;
-        probe.children[8].material.opacity = 0.3;
+        probe.children[11].material.opacity = 0.8;
+        probe.children[10].material.opacity = 0.25;
     } else {
-        probe.children[9].material.opacity = 0.0;
-        probe.children[8].material.opacity = 0.15;
+        probe.children[11].material.opacity = 0.0;
+        probe.children[10].material.opacity = 0.12;
     }
 }
 

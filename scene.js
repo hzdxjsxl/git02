@@ -6,20 +6,18 @@ import {
     EARTH_MOON_DISTANCE
 } from './physics.js';
 
-const SCALE = 1 / 1000000;
+const WORLD_DISPLAY_SCALE = 3 / 1000000;
 
-const EARTH_DISPLAY_RADIUS = EARTH_RADIUS * SCALE * 3;
-const MOON_DISPLAY_RADIUS = MOON_RADIUS * SCALE * 3;
+const EARTH_DISPLAY_RADIUS = EARTH_RADIUS * WORLD_DISPLAY_SCALE;
+const MOON_DISPLAY_RADIUS = MOON_RADIUS * WORLD_DISPLAY_SCALE;
 
-const EARTH_POSITION_SCALE = 1 / 5000000;
-
-const PROBE_SCALE = 5;
+const PROBE_SCALE = 3;
 
 function worldToDisplay(worldPos) {
     return new THREE.Vector3(
-        worldPos[0] * EARTH_POSITION_SCALE,
-        worldPos[2] * EARTH_POSITION_SCALE,
-        worldPos[1] * EARTH_POSITION_SCALE
+        worldPos[0] * WORLD_DISPLAY_SCALE,
+        worldPos[2] * WORLD_DISPLAY_SCALE,
+        worldPos[1] * WORLD_DISPLAY_SCALE
     );
 }
 
@@ -82,11 +80,11 @@ function createEarth() {
 
     const earth = new THREE.Mesh(geometry, material);
 
-    const atmosphereGeometry = new THREE.SphereGeometry(EARTH_DISPLAY_RADIUS * 1.08, 64, 64);
+    const atmosphereGeometry = new THREE.SphereGeometry(EARTH_DISPLAY_RADIUS * 1.06, 64, 64);
     const atmosphereMaterial = new THREE.MeshPhongMaterial({
         color: 0x4488ff,
         transparent: true,
-        opacity: 0.15,
+        opacity: 0.12,
         side: THREE.BackSide,
         depthWrite: false
     });
@@ -151,107 +149,109 @@ function createMoon() {
 function createProbe() {
     const group = new THREE.Group();
 
-    const mainBodyGeom = new THREE.CylinderGeometry(0.8 * PROBE_SCALE, 1.0 * PROBE_SCALE, 2.5 * PROBE_SCALE, 12);
-    const mainBodyMat = new THREE.MeshPhongMaterial({
-        color: 0xe8e8e8,
-        shininess: 80,
+    const s = PROBE_SCALE;
+
+    const bodyGeom = new THREE.CylinderGeometry(0.6 * s, 0.8 * s, 2.0 * s, 12);
+    const bodyMat = new THREE.MeshPhongMaterial({
+        color: 0xffffff,
+        shininess: 100,
         specular: 0xffffff
     });
-    const mainBody = new THREE.Mesh(mainBodyGeom, mainBodyMat);
-    mainBody.rotation.x = Math.PI / 2;
-    group.add(mainBody);
+    const body = new THREE.Mesh(bodyGeom, bodyMat);
+    body.rotation.x = Math.PI / 2;
+    group.add(body);
 
-    const noseGeom = new THREE.ConeGeometry(0.8 * PROBE_SCALE, 1.2 * PROBE_SCALE, 12);
+    const noseGeom = new THREE.ConeGeometry(0.6 * s, 1.0 * s, 12);
     const noseMat = new THREE.MeshPhongMaterial({
-        color: 0xff6644,
-        shininess: 100,
+        color: 0xff4422,
+        shininess: 120,
         specular: 0xffaaaa
     });
     const nose = new THREE.Mesh(noseGeom, noseMat);
-    nose.position.z = 1.85 * PROBE_SCALE;
+    nose.position.z = 1.5 * s;
     group.add(nose);
 
-    const engineGeom = new THREE.CylinderGeometry(0.5 * PROBE_SCALE, 0.7 * PROBE_SCALE, 0.8 * PROBE_SCALE, 8);
+    const engineGeom = new THREE.CylinderGeometry(0.35 * s, 0.5 * s, 0.6 * s, 8);
     const engineMat = new THREE.MeshPhongMaterial({
-        color: 0x666666,
+        color: 0x555555,
         shininess: 60
     });
     const engine = new THREE.Mesh(engineGeom, engineMat);
-    engine.position.z = -1.65 * PROBE_SCALE;
+    engine.position.z = -1.3 * s;
     engine.rotation.x = Math.PI / 2;
     group.add(engine);
 
-    const solarPanelGeom = new THREE.BoxGeometry(4 * PROBE_SCALE, 0.1 * PROBE_SCALE, 1.2 * PROBE_SCALE);
-    const solarPanelMat = new THREE.MeshPhongMaterial({
-        color: 0x2244aa,
-        shininess: 30
+    const panelGeom = new THREE.BoxGeometry(3.0 * s, 0.08 * s, 1.0 * s);
+    const panelMat = new THREE.MeshPhongMaterial({
+        color: 0x2244cc,
+        shininess: 40
     });
-    const solarLeft = new THREE.Mesh(solarPanelGeom, solarPanelMat);
-    solarLeft.position.set(-2.5 * PROBE_SCALE, 0, 0);
-    group.add(solarLeft);
+    const panelLeft = new THREE.Mesh(panelGeom, panelMat);
+    panelLeft.position.set(-2.0 * s, 0, 0);
+    group.add(panelLeft);
 
-    const solarRight = new THREE.Mesh(solarPanelGeom, solarPanelMat);
-    solarRight.position.set(2.5 * PROBE_SCALE, 0, 0);
-    group.add(solarRight);
+    const panelRight = new THREE.Mesh(panelGeom, panelMat);
+    panelRight.position.set(2.0 * s, 0, 0);
+    group.add(panelRight);
 
-    const panelFrameGeom = new THREE.BoxGeometry(4.2 * PROBE_SCALE, 0.15 * PROBE_SCALE, 0.15 * PROBE_SCALE);
-    const panelFrameMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+    const frameGeom = new THREE.BoxGeometry(3.2 * s, 0.12 * s, 0.12 * s);
+    const frameMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
 
-    const frameTop1 = new THREE.Mesh(panelFrameGeom, panelFrameMat);
-    frameTop1.position.set(-2.5 * PROBE_SCALE, 0, 0.65 * PROBE_SCALE);
-    group.add(frameTop1);
+    const ft1 = new THREE.Mesh(frameGeom, frameMat);
+    ft1.position.set(-2.0 * s, 0, 0.55 * s);
+    group.add(ft1);
 
-    const frameBot1 = new THREE.Mesh(panelFrameGeom, panelFrameMat);
-    frameBot1.position.set(-2.5 * PROBE_SCALE, 0, -0.65 * PROBE_SCALE);
-    group.add(frameBot1);
+    const fb1 = new THREE.Mesh(frameGeom, frameMat);
+    fb1.position.set(-2.0 * s, 0, -0.55 * s);
+    group.add(fb1);
 
-    const frameTop2 = new THREE.Mesh(panelFrameGeom, panelFrameMat);
-    frameTop2.position.set(2.5 * PROBE_SCALE, 0, 0.65 * PROBE_SCALE);
-    group.add(frameTop2);
+    const ft2 = new THREE.Mesh(frameGeom, frameMat);
+    ft2.position.set(2.0 * s, 0, 0.55 * s);
+    group.add(ft2);
 
-    const frameBot2 = new THREE.Mesh(panelFrameGeom, panelFrameMat);
-    frameBot2.position.set(2.5 * PROBE_SCALE, 0, -0.65 * PROBE_SCALE);
-    group.add(frameBot2);
+    const fb2 = new THREE.Mesh(frameGeom, frameMat);
+    fb2.position.set(2.0 * s, 0, -0.55 * s);
+    group.add(fb2);
 
-    const dishGeom = new THREE.SphereGeometry(0.8 * PROBE_SCALE, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const dishGeom = new THREE.SphereGeometry(0.7 * s, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
     const dishMat = new THREE.MeshPhongMaterial({
-        color: 0xdddddd,
+        color: 0xeeeeee,
         shininess: 80,
         side: THREE.DoubleSide
     });
     const dish = new THREE.Mesh(dishGeom, dishMat);
-    dish.position.set(0, -1.0 * PROBE_SCALE, -0.3 * PROBE_SCALE);
+    dish.position.set(0, -0.8 * s, -0.2 * s);
     dish.rotation.x = Math.PI / 2;
     group.add(dish);
 
-    const dishStemGeom = new THREE.CylinderGeometry(0.08 * PROBE_SCALE, 0.08 * PROBE_SCALE, 1.0 * PROBE_SCALE, 6);
+    const dishStemGeom = new THREE.CylinderGeometry(0.06 * s, 0.06 * s, 0.8 * s, 6);
     const dishStemMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
     const dishStem = new THREE.Mesh(dishStemGeom, dishStemMat);
-    dishStem.position.set(0, -0.5 * PROBE_SCALE, -0.3 * PROBE_SCALE);
+    dishStem.position.set(0, -0.4 * s, -0.2 * s);
     dishStem.rotation.x = Math.PI / 2;
     group.add(dishStem);
 
-    const glowGeom = new THREE.SphereGeometry(1.5 * PROBE_SCALE, 16, 16);
+    const glowGeom = new THREE.SphereGeometry(1.2 * s, 16, 16);
     const glowMat = new THREE.MeshBasicMaterial({
         color: 0x66aaff,
         transparent: true,
-        opacity: 0.15,
+        opacity: 0.12,
         depthWrite: false
     });
     const glow = new THREE.Mesh(glowGeom, glowMat);
     group.add(glow);
 
-    const engineGlowGeom = new THREE.ConeGeometry(0.6 * PROBE_SCALE, 1.5 * PROBE_SCALE, 8);
-    const engineGlowMat = new THREE.MeshBasicMaterial({
+    const thrustGeom = new THREE.ConeGeometry(0.4 * s, 1.2 * s, 8);
+    const thrustMat = new THREE.MeshBasicMaterial({
         color: 0xff8844,
         transparent: true,
         opacity: 0.0,
         depthWrite: false
     });
-    const engineGlow = new THREE.Mesh(engineGlowGeom, engineGlowMat);
-    engineGlow.position.set(0, 0, -2.5 * PROBE_SCALE);
-    engineGlow.rotation.x = -Math.PI / 2;
-    group.add(engineGlow);
+    const thrust = new THREE.Mesh(thrustGeom, thrustMat);
+    thrust.position.set(0, 0, -2.0 * s);
+    thrust.rotation.x = -Math.PI / 2;
+    group.add(thrust);
 
     return group;
 }
@@ -280,9 +280,9 @@ function createOrbitRing(radius, color = 0x444488, segments = 128) {
     for (let i = 0; i <= segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
         points.push(new THREE.Vector3(
-            Math.cos(angle) * radius * EARTH_POSITION_SCALE,
+            Math.cos(angle) * radius * WORLD_DISPLAY_SCALE,
             0,
-            Math.sin(angle) * radius * EARTH_POSITION_SCALE
+            Math.sin(angle) * radius * WORLD_DISPLAY_SCALE
         ));
     }
 
@@ -305,7 +305,7 @@ function createStarField(count = 5000) {
     for (let i = 0; i < count; i++) {
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
-        const radius = 300 + Math.random() * 100;
+        const radius = 500 + Math.random() * 200;
 
         positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
         positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
@@ -313,14 +313,14 @@ function createStarField(count = 5000) {
 
         const brightness = 0.5 + Math.random() * 0.5;
         const tint = Math.random();
-        if (tint < 0.2) {
-            colors[i * 3] = brightness * 0.8;
-            colors[i * 3 + 1] = brightness * 0.9;
+        if (tint < 0.15) {
+            colors[i * 3] = brightness * 0.7;
+            colors[i * 3 + 1] = brightness * 0.85;
             colors[i * 3 + 2] = brightness;
-        } else if (tint < 0.3) {
+        } else if (tint < 0.25) {
             colors[i * 3] = brightness;
-            colors[i * 3 + 1] = brightness * 0.8;
-            colors[i * 3 + 2] = brightness * 0.7;
+            colors[i * 3 + 1] = brightness * 0.75;
+            colors[i * 3 + 2] = brightness * 0.65;
         } else {
             colors[i * 3] = brightness;
             colors[i * 3 + 1] = brightness;
@@ -332,7 +332,7 @@ function createStarField(count = 5000) {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-        size: 0.8,
+        size: 1.0,
         sizeAttenuation: true,
         transparent: true,
         opacity: 0.9,
@@ -343,14 +343,13 @@ function createStarField(count = 5000) {
 }
 
 function createMoonOrbitLine() {
-    return createOrbitRing(EARTH_MOON_DISTANCE, 0x444466, 256);
+    return createOrbitRing(EARTH_MOON_DISTANCE, 0x333355, 256);
 }
 
 export {
-    SCALE,
+    WORLD_DISPLAY_SCALE,
     EARTH_DISPLAY_RADIUS,
     MOON_DISPLAY_RADIUS,
-    EARTH_POSITION_SCALE,
     PROBE_SCALE,
     worldToDisplay,
     createEarth,
