@@ -53,6 +53,7 @@
       state.couriers = data.couriers;
       state.orders = data.orders;
       Renderer.init(els.canvas, state.mapSize);
+      Renderer.start();
     } else if (data.type === 'update') {
       state.couriers = data.couriers;
       if (data.removed && data.removed.length) {
@@ -79,7 +80,7 @@
     state.matches = matchResult.pairs;
 
     var hotResult = Heatmap.detectHotZones(state.orders, state.couriers, state.mapSize);
-    var surgeZones = Heatmap.computeSurge(hotResult.hotZones);
+    var surgeZones = Heatmap.computeSurge(hotResult.zones);
     state.hotZones = surgeZones;
 
     els.orderCount.textContent = state.orders.length;
@@ -92,7 +93,6 @@
       matches: state.matches,
       hotZones: state.hotZones
     });
-    Renderer.render();
 
     renderSidebar();
   }
@@ -104,6 +104,7 @@
     });
     for (var i = 0; i < sorted.length; i++) {
       var p = sorted[i];
+      var lockIcon = p.stable ? ' 🔒' : '';
       var div = document.createElement('div');
       div.className = 'match-item';
       div.innerHTML =
@@ -112,7 +113,7 @@
         '<span class="arrow">→</span>' +
         '<span class="oid">' + p.orderId + '</span>' +
         '</div>' +
-        '<span class="score">距' + p.distance + ' · ¥' + p.amount + '</span>';
+        '<span class="score">' + (p.stable ? '稳' : '新') + ' 距' + p.distance + ' · ¥' + p.amount + '</span>';
       els.matchList.appendChild(div);
     }
 

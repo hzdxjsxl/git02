@@ -1,5 +1,9 @@
 var Matcher = (function () {
 
+  var STABILITY_BONUS = -200;
+  var DRIFT_THRESHOLD = 70;
+  var memory = {};
+
   function distance(a, b) {
     var dx = a.x - b.x;
     var dy = a.y - b.y;
@@ -17,9 +21,20 @@ var Matcher = (function () {
       cost[i] = [];
       for (var j = 0; j < size; j++) {
         if (i < n && j < m) {
-          var dist = distance(orders[i].pos, couriers[j].pos);
-          var amount = orders[i].amount;
+          var o = orders[i];
+          var c = couriers[j];
+          var dist = distance(o.pos, c.pos);
+          var amount = o.amount;
           var score = dist * 0.6 - amount * 2.5;
+
+          var mem = memory[o.id];
+          if (mem && mem.courierId === c.id) {
+            var drift = Math.abs(dist - mem.matchDist);
+            if (drift < DRIFT_THRESHOLD) {
+              score += STABILITY_BONUS;
+            }
+          }
+
           cost[i][j] = score;
         } else {
           cost[i][j] = INF;
@@ -92,9 +107,32 @@ var Matcher = (function () {
     return assignment;
   }
 
+  function updateMemory(pairs, orders, couriers) {
+    var newMem = {};
+    var orderMap = {};
+    var courierMap = {};
+    for (var i = 0; i < orders.length; i++) orderMap[orders[i].id] = orders[i];
+    for (var j = 0; j < couriers.length; j++) courierMap[couriers[j].id] = couriers[j];
+
+    for (var k = 0; k < pairs.length; k++) {
+      var p = pairs[k];
+      var o = orderMap[p.orderId];
+      var c = courierMap[p.courierId];
+      if (o && c) {
+        newMem[p.orderId] = {
+          courierId: p.courierId,
+          matchDist: distance(o.pos, c.pos),
+          locked: true
+        };
+      }
+    }
+    memory = newMem;
+  }
+
   function match(orders, couriers) {
     var t0 = performance.now();
     if (!orders.length || !couriers.length) {
+      memory = {};
       return { pairs: [], timeMs: 0 };
     }
     var cost = buildCostMatrix(orders, couriers);
@@ -107,6 +145,17 @@ var Matcher = (function () {
         var c = couriers[assignment[i]];
         var dist = distance(o.pos, c.pos);
         var score = dist * 0.6 - o.amount * 2.5;
+
+        var isStable = false;
+        var mem = memory[o.id];
+        if (mem && mem.courierId === c.id) {
+          var drift = Math.abs(dist - mem.matchDist);
+          if (drift < DRIFT_THRESHOLD) {
+            score += STABILITY_BONUS;
+            isStable = true;
+          }
+        }
+
         pairs.push({
           orderId: o.id,
           courierId: c.id,
@@ -114,13 +163,21 @@ var Matcher = (function () {
           courierIdx: assignment[i],
           distance: Math.round(dist),
           amount: o.amount,
-          score: score
+          score: score,
+          stable: isStable
         });
       }
     }
+
+    updateMemory(pairs, orders, couriers);
+
     var t1 = performance.now();
     return { pairs: pairs, timeMs: Math.round(t1 - t0) };
   }
 
-  return { match: match, distance: distance };
+  function reset() {
+    memory = {};
+  }
+
+  return { match: match, distance: distance, reset: reset };
 })();
