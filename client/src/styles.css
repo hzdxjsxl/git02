@@ -1,0 +1,386 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.app-container {
+  max-width: 800px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  color: #fff;
+  padding: 32px 40px;
+  text-align: center;
+}
+
+.app-header h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.subtitle {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.form-wrapper {
+  padding: 32px 40px;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.form-wrapper::-webkit-scrollbar {
+  width: 6px;
+}
+
+.form-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.form-wrapper::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.form-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+.form-renderer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.field-item {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.field-label {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.required-mark {
+  color: #e74c3c;
+  margin-left: 2px;
+}
+
+.field-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  background: #fafafa;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: #667eea;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.field-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.radio-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #555;
+  padding: 8px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.radio-item:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+}
+
+.radio-item input[type='radio'] {
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.radio-item:has(input[type='radio']:checked) {
+  border-color: #667eea;
+  background: #667eea;
+  color: #fff;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #555;
+  padding: 8px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.checkbox-item:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+}
+
+.checkbox-item input[type='checkbox'] {
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.checkbox-item:has(input[type='checkbox']:checked) {
+  border-color: #667eea;
+  background: #667eea;
+  color: #fff;
+}
+
+.field-error {
+  color: #e74c3c;
+  font-size: 13px;
+  margin-top: 6px;
+  padding-left: 4px;
+}
+
+.has-error .field-input {
+  border-color: #e74c3c;
+}
+
+.has-error .field-input:focus {
+  border-color: #e74c3c;
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+}
+
+.field-group {
+  border: 2px solid #e8e8e8;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fafbfc;
+  animation: slideIn 0.3s ease-out;
+}
+
+.group-title {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: #fff;
+  padding: 14px 20px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.group-content {
+  padding: 20px;
+}
+
+.group-content .form-renderer {
+  gap: 16px;
+}
+
+.group-content .field-group {
+  border-color: #e0e0e0;
+  background: #fff;
+}
+
+.group-content .group-title {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.form-actions {
+  padding: 24px 40px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  border-top: 1px solid #eee;
+  background: #fafafa;
+}
+
+.btn {
+  padding: 12px 32px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background: #fff;
+  color: #666;
+  border: 2px solid #e0e0e0;
+}
+
+.btn-secondary:hover {
+  border-color: #667eea;
+  color: #667eea;
+  background: #f8f9ff;
+}
+
+.submit-status {
+  padding: 16px 40px;
+  margin: 0 24px 16px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.submit-status.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.submit-status.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.submit-status.submitting {
+  background: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+.submit-status h3 {
+  margin-bottom: 8px;
+}
+
+.submit-status details {
+  text-align: left;
+  margin-top: 12px;
+}
+
+.submit-status summary {
+  cursor: pointer;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.submit-status pre {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f0f0f0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading p {
+  color: #666;
+  font-size: 15px;
+}
+
+.error {
+  padding: 40px;
+  text-align: center;
+}
+
+.error h2 {
+  color: #e74c3c;
+  margin-bottom: 12px;
+}
+
+.error p {
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.error .hint {
+  font-size: 13px;
+  color: #999;
+  margin-top: 16px;
+}
