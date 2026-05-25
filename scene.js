@@ -159,39 +159,47 @@ function createProbe() {
     });
     const body = new THREE.Mesh(bodyGeom, bodyMat);
     body.rotation.x = Math.PI / 2;
+    body.renderOrder = 10;
     group.add(body);
 
     const noseGeom = new THREE.ConeGeometry(0.6 * s, 1.0 * s, 12);
     const noseMat = new THREE.MeshPhongMaterial({
         color: 0xff4422,
         shininess: 120,
-        specular: 0xffaaaa
+        specular: 0xffaaaa,
+        emissive: 0x331100
     });
     const nose = new THREE.Mesh(noseGeom, noseMat);
     nose.position.z = 1.5 * s;
+    nose.renderOrder = 10;
     group.add(nose);
 
     const engineGeom = new THREE.CylinderGeometry(0.35 * s, 0.5 * s, 0.6 * s, 8);
     const engineMat = new THREE.MeshPhongMaterial({
         color: 0x555555,
-        shininess: 60
+        shininess: 60,
+        emissive: 0x111111
     });
     const engine = new THREE.Mesh(engineGeom, engineMat);
     engine.position.z = -1.3 * s;
     engine.rotation.x = Math.PI / 2;
+    engine.renderOrder = 10;
     group.add(engine);
 
     const panelGeom = new THREE.BoxGeometry(3.0 * s, 0.08 * s, 1.0 * s);
     const panelMat = new THREE.MeshPhongMaterial({
         color: 0x2244cc,
-        shininess: 40
+        shininess: 40,
+        emissive: 0x001133
     });
     const panelLeft = new THREE.Mesh(panelGeom, panelMat);
     panelLeft.position.set(-2.0 * s, 0, 0);
+    panelLeft.renderOrder = 10;
     group.add(panelLeft);
 
     const panelRight = new THREE.Mesh(panelGeom, panelMat);
     panelRight.position.set(2.0 * s, 0, 0);
+    panelRight.renderOrder = 10;
     group.add(panelRight);
 
     const frameGeom = new THREE.BoxGeometry(3.2 * s, 0.12 * s, 0.12 * s);
@@ -199,18 +207,22 @@ function createProbe() {
 
     const ft1 = new THREE.Mesh(frameGeom, frameMat);
     ft1.position.set(-2.0 * s, 0, 0.55 * s);
+    ft1.renderOrder = 10;
     group.add(ft1);
 
     const fb1 = new THREE.Mesh(frameGeom, frameMat);
     fb1.position.set(-2.0 * s, 0, -0.55 * s);
+    fb1.renderOrder = 10;
     group.add(fb1);
 
     const ft2 = new THREE.Mesh(frameGeom, frameMat);
     ft2.position.set(2.0 * s, 0, 0.55 * s);
+    ft2.renderOrder = 10;
     group.add(ft2);
 
     const fb2 = new THREE.Mesh(frameGeom, frameMat);
     fb2.position.set(2.0 * s, 0, -0.55 * s);
+    fb2.renderOrder = 10;
     group.add(fb2);
 
     const dishGeom = new THREE.SphereGeometry(0.7 * s, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -222,6 +234,7 @@ function createProbe() {
     const dish = new THREE.Mesh(dishGeom, dishMat);
     dish.position.set(0, -0.8 * s, -0.2 * s);
     dish.rotation.x = Math.PI / 2;
+    dish.renderOrder = 10;
     group.add(dish);
 
     const dishStemGeom = new THREE.CylinderGeometry(0.06 * s, 0.06 * s, 0.8 * s, 6);
@@ -229,6 +242,7 @@ function createProbe() {
     const dishStem = new THREE.Mesh(dishStemGeom, dishStemMat);
     dishStem.position.set(0, -0.4 * s, -0.2 * s);
     dishStem.rotation.x = Math.PI / 2;
+    dishStem.renderOrder = 10;
     group.add(dishStem);
 
     const glowGeom = new THREE.SphereGeometry(1.2 * s, 16, 16);
@@ -239,6 +253,7 @@ function createProbe() {
         depthWrite: false
     });
     const glow = new THREE.Mesh(glowGeom, glowMat);
+    glow.renderOrder = 1;
     group.add(glow);
 
     const thrustGeom = new THREE.ConeGeometry(0.4 * s, 1.2 * s, 8);
@@ -251,7 +266,10 @@ function createProbe() {
     const thrust = new THREE.Mesh(thrustGeom, thrustMat);
     thrust.position.set(0, 0, -2.0 * s);
     thrust.rotation.x = -Math.PI / 2;
+    thrust.renderOrder = 5;
     group.add(thrust);
+
+    group.renderOrder = 10;
 
     return group;
 }

@@ -132,25 +132,24 @@ function updateMission(controller, probeState, currentTime, dt) {
 function updateParkingPhase(controller, probeState, currentTime, dt) {
     const parkingParams = computeParkingOrbitParameters(300000);
 
-    if (controller.parkingOrbitTime < parkingParams.period * 1.5) {
+    if (controller.parkingOrbitTime < parkingParams.period * 2.0) {
         controller.parkingOrbitTime += dt;
     } else if (!controller.tliCompleted) {
         const tliParams = computeTLIDeltaV(300000);
 
         const moonPos = getMoonPosition(currentTime + tliParams.transferTime * 0.8);
 
-        const earthToMoon = vec3Normalize(moonPos);
-
         const currentPos = probeState.position;
         const currentVel = probeState.velocity;
-        const posDir = vec3Normalize(currentPos);
 
         const velDir = vec3Normalize(currentVel);
         const earthToMoonDir = vec3Normalize(moonPos);
 
         const alignment = vec3Dot(velDir, earthToMoonDir);
 
-        if (alignment > 0.95 || controller.tliBurnTime > 0) {
+        const forceTLI = controller.parkingOrbitTime > parkingParams.period * 2.5;
+
+        if (alignment > 0.9 || forceTLI || controller.tliBurnTime > 0) {
             controller.thrustActive = true;
             controller.thrustDuration = tliParams.deltaV / 15;
             controller.thrustDirection = velDir;
@@ -196,17 +195,20 @@ function updateLunarCapturePhase(controller, probeState, currentTime, dt) {
     const r = vec3Length(relPos);
     const targetR = MOON_RADIUS + 100000;
 
-    if (Math.abs(r - targetR) < targetR * 0.3 && controller.captureBurnTime < 1) {
+    const timeInPhase = currentTime - controller.phaseStartTime;
+    const forceCapture = timeInPhase > 86400 * 2;
+
+    if ((Math.abs(r - targetR) < targetR * 0.5 || controller.captureBurnTime > 0 || forceCapture) && controller.captureBurnTime < 2) {
         const vRel = vec3Length(relVel);
         const vTarget = computeOrbitalVelocity(MOON_MU, MOON_RADIUS, 100000);
 
         const deltaV = vTarget - vRel;
 
-        if (Math.abs(deltaV) > 1) {
+        if (Math.abs(deltaV) > 0.5 || controller.captureBurnTime > 0) {
             controller.thrustActive = true;
             const relVelDir = vec3Normalize(relVel);
             const thrustDir = deltaV > 0 ? relVelDir : vec3Scale(relVelDir, -1);
-            const thrustMag = Math.min(Math.abs(deltaV) / 10, 20);
+            const thrustMag = Math.min(Math.max(Math.abs(deltaV) / 5, 5), 20);
             controller.thrustAcceleration = vec3Scale(thrustDir, thrustMag);
             controller.thrustDirection = thrustDir;
             controller.captureBurnTime += dt;
@@ -215,7 +217,7 @@ function updateLunarCapturePhase(controller, probeState, currentTime, dt) {
             controller.phase = MISSION_PHASES.LUNAR_ORBIT;
             controller.phaseStartTime = currentTime;
         }
-    } else if (controller.captureBurnTime >= 1) {
+    } else if (controller.captureBurnTime >= 2) {
         controller.captureCompleted = true;
         controller.phase = MISSION_PHASES.LUNAR_ORBIT;
         controller.phaseStartTime = currentTime;

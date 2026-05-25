@@ -206,7 +206,7 @@ function resetMission() {
 }
 
 function changeSpeed() {
-    const speeds = [1, 2, 5, 10, 20, 50, 100, 200];
+    const speeds = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
     const currentIndex = speeds.indexOf(timeScale);
     timeScale = speeds[(currentIndex + 1) % speeds.length];
     document.getElementById('btn-speed-up').textContent = `⏩ 加速 ${timeScale}x`;
@@ -214,8 +214,8 @@ function changeSpeed() {
 
 function changeCamera() {
     cameraMode = (cameraMode + 1) % 5;
-    const probePos = probe.position;
-    const moonPos = moon.position;
+    const probePos = probe.position.clone();
+    const moonPos = moon.position.clone();
 
     switch (cameraMode) {
         case 0:
@@ -224,31 +224,33 @@ function changeCamera() {
             break;
         case 1:
             controls.target.set(0, 0, 0);
-            camera.position.set(0, 120, 1);
+            camera.position.set(0, 120, 0.1);
             break;
         case 2:
             controls.target.copy(probePos);
+            const followDist = Math.min(40, 20 + timeScale * 0.02);
             camera.position.set(
-                probePos.x + 10,
-                probePos.y + 10,
-                probePos.z + 10
+                probePos.x + followDist,
+                probePos.y + followDist,
+                probePos.z + followDist
             );
             break;
         case 3:
             controls.target.copy(moonPos);
             camera.position.set(
-                moonPos.x + 20,
-                moonPos.y + 20,
-                moonPos.z + 20
+                moonPos.x + 30,
+                moonPos.y + 30,
+                moonPos.z + 30
             );
             break;
         case 4:
             const midPoint = new THREE.Vector3().addVectors(probePos, moonPos).multiplyScalar(0.5);
             controls.target.copy(midPoint);
+            const dist = vec3Distance(probeState.position, getMoonPosition(simulationTime)) * WORLD_DISPLAY_SCALE * 0.8;
             camera.position.set(
-                midPoint.x + 50,
-                midPoint.y + 50,
-                midPoint.z + 50
+                midPoint.x + dist,
+                midPoint.y + dist * 0.6,
+                midPoint.z + dist
             );
             break;
     }
@@ -259,7 +261,8 @@ function updatePhysics(dt) {
 
     const scaledDt = dt * timeScale;
 
-    const subSteps = Math.max(1, Math.ceil(scaledDt / 30));
+    const maxSubDt = 10;
+    const subSteps = Math.max(1, Math.ceil(scaledDt / maxSubDt));
     const subDt = scaledDt / subSteps;
 
     for (let i = 0; i < subSteps; i++) {
@@ -289,6 +292,12 @@ function updatePhysics(dt) {
             subDt,
             missionController.thrustAcceleration
         );
+
+        const posLen = vec3Length(probeState.position);
+        if (!isFinite(posLen)) {
+            probeState = createProbeState(300000);
+            break;
+        }
     }
 
     simulationTime += scaledDt;
@@ -299,7 +308,11 @@ function updateTrajectory() {
 
     if (trajectoryPointCount >= MAX_TRAJECTORY_POINTS) return;
 
-    const minInterval = 30;
+    let minInterval = 30;
+    if (timeScale > 100) minInterval = 50;
+    if (timeScale > 500) minInterval = 100;
+    if (timeScale > 2000) minInterval = 200;
+
     if (simulationTime - lastTrajectoryUpdate < minInterval) return;
     lastTrajectoryUpdate = simulationTime;
 
@@ -343,6 +356,13 @@ function updateVisuals() {
 
     if (cameraMode === 2) {
         controls.target.copy(probe.position);
+        const followDistance = Math.min(30, 15 + timeScale * 0.02);
+        const desiredPos = new THREE.Vector3(
+            probe.position.x + followDistance,
+            probe.position.y + followDistance,
+            probe.position.z + followDistance
+        );
+        camera.position.lerp(desiredPos, 0.1);
     } else if (cameraMode === 3) {
         controls.target.copy(moon.position);
     } else if (cameraMode === 4) {
@@ -351,11 +371,11 @@ function updateVisuals() {
     }
 
     if (missionController.thrustActive) {
-        probe.children[11].material.opacity = 0.8;
-        probe.children[10].material.opacity = 0.25;
+        probe.children[12].material.opacity = 0.8;
+        probe.children[11].material.opacity = 0.25;
     } else {
-        probe.children[11].material.opacity = 0.0;
-        probe.children[10].material.opacity = 0.12;
+        probe.children[12].material.opacity = 0.0;
+        probe.children[11].material.opacity = 0.12;
     }
 }
 

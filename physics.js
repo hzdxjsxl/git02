@@ -105,28 +105,54 @@ function computeDerivatives(state, bodies, thrustAccel) {
 }
 
 function rk4Step(state, bodies, dt, thrustAccel) {
-    const k1 = computeDerivatives(state, bodies, thrustAccel);
+    const MAX_POS = 1e15;
+    const MAX_VEL = 1e8;
+
+    const clampState = (s) => {
+        const posLen = vec3Length(s.position);
+        const velLen = vec3Length(s.velocity);
+
+        if (posLen > MAX_POS || !isFinite(posLen)) {
+            const scale = MAX_POS / Math.max(posLen, 1);
+            return {
+                position: vec3Scale(s.position, scale),
+                velocity: vec3Scale(s.velocity, 0.5)
+            };
+        }
+        if (velLen > MAX_VEL || !isFinite(velLen)) {
+            const scale = MAX_VEL / Math.max(velLen, 1);
+            return {
+                position: s.position,
+                velocity: vec3Scale(s.velocity, scale)
+            };
+        }
+        return s;
+    };
+
+    const safeState = clampState(state);
+
+    const k1 = computeDerivatives(safeState, bodies, thrustAccel);
 
     const state2 = {
-        position: vec3Add(state.position, vec3Scale(k1.dPosition, dt / 2)),
-        velocity: vec3Add(state.velocity, vec3Scale(k1.dVelocity, dt / 2))
+        position: vec3Add(safeState.position, vec3Scale(k1.dPosition, dt / 2)),
+        velocity: vec3Add(safeState.velocity, vec3Scale(k1.dVelocity, dt / 2))
     };
-    const k2 = computeDerivatives(state2, bodies, thrustAccel);
+    const k2 = computeDerivatives(clampState(state2), bodies, thrustAccel);
 
     const state3 = {
-        position: vec3Add(state.position, vec3Scale(k2.dPosition, dt / 2)),
-        velocity: vec3Add(state.velocity, vec3Scale(k2.dVelocity, dt / 2))
+        position: vec3Add(safeState.position, vec3Scale(k2.dPosition, dt / 2)),
+        velocity: vec3Add(safeState.velocity, vec3Scale(k2.dVelocity, dt / 2))
     };
-    const k3 = computeDerivatives(state3, bodies, thrustAccel);
+    const k3 = computeDerivatives(clampState(state3), bodies, thrustAccel);
 
     const state4 = {
-        position: vec3Add(state.position, vec3Scale(k3.dPosition, dt)),
-        velocity: vec3Add(state.velocity, vec3Scale(k3.dVelocity, dt))
+        position: vec3Add(safeState.position, vec3Scale(k3.dPosition, dt)),
+        velocity: vec3Add(safeState.velocity, vec3Scale(k3.dVelocity, dt))
     };
-    const k4 = computeDerivatives(state4, bodies, thrustAccel);
+    const k4 = computeDerivatives(clampState(state4), bodies, thrustAccel);
 
     const newPosition = vec3Add(
-        state.position,
+        safeState.position,
         vec3Scale(
             vec3Add(
                 vec3Add(k1.dPosition, vec3Scale(k2.dPosition, 2)),
@@ -137,7 +163,7 @@ function rk4Step(state, bodies, dt, thrustAccel) {
     );
 
     const newVelocity = vec3Add(
-        state.velocity,
+        safeState.velocity,
         vec3Scale(
             vec3Add(
                 vec3Add(k1.dVelocity, vec3Scale(k2.dVelocity, 2)),
@@ -147,10 +173,10 @@ function rk4Step(state, bodies, dt, thrustAccel) {
         )
     );
 
-    return {
+    return clampState({
         position: newPosition,
         velocity: newVelocity
-    };
+    });
 }
 
 function computeOrbitalVelocity(mu, radius, altitude) {
