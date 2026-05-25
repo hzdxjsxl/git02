@@ -139,7 +139,11 @@ function SelectField({ field, value, error, onChange }) {
 }
 
 function GroupField({ field, formValues, errors, onFieldChange }) {
-  const childFields = field.visibleChildFields || field.fields || [];
+  const childFields = Array.isArray(field.visibleChildFields)
+    ? field.visibleChildFields.filter(f => f && f.id && f.id !== field.id)
+    : [];
+
+  if (childFields.length === 0) return null;
 
   return (
     <div className="field-group">
@@ -187,7 +191,9 @@ function FieldRenderer({ field, formValues, errors, onFieldChange }) {
 const MemoFieldRenderer = memo(FieldRenderer);
 
 function FormRenderer({ fields, formValues, errors, onFieldChange }) {
-  const sortedFields = [...fields].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const validFields = (Array.isArray(fields) ? fields : [])
+    .filter(f => f && f.id);
+  const sortedFields = [...validFields].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   return (
     <div className="form-renderer">

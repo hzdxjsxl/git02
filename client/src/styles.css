@@ -70,6 +70,8 @@ body {
 }
 
 .field-item {
+  position: relative;
+  z-index: 1;
   animation: slideIn 0.3s ease-out;
 }
 
@@ -207,6 +209,8 @@ body {
 }
 
 .field-group {
+  position: relative;
+  z-index: 2;
   border: 2px solid #e8e8e8;
   border-radius: 12px;
   overflow: hidden;
@@ -223,6 +227,8 @@ body {
 }
 
 .group-content {
+  position: relative;
+  overflow: hidden;
   padding: 20px;
 }
 

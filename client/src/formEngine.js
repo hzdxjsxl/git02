@@ -129,9 +129,9 @@ function validateVisibleFields(fields, formValues, flatMap) {
 }
 
 function parseFormSchema(schema, formValues) {
-  const visibleFields = [];
-
   function parseFields(fields) {
+    const localVisible = [];
+
     fields.forEach(field => {
       if (shouldShowField(field, formValues)) {
         const parsedField = { ...field };
@@ -140,17 +140,18 @@ function parseFormSchema(schema, formValues) {
           parsedField.visibleChildFields = parseFields(field.fields);
         }
 
-        visibleFields.push(parsedField);
+        localVisible.push(parsedField);
       }
     });
 
-    return visibleFields;
+    return localVisible;
   }
 
-  parseFields(schema.fields);
+  const topLevelVisible = parseFields(schema.fields);
+
   return {
     ...schema,
-    visibleFields,
+    visibleFields: topLevelVisible,
     flatMap: flattenForValidation(schema.fields),
     allFields: collectAllFields(schema.fields)
   };
