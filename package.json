@@ -1,0 +1,14 @@
+{
+  "name": "driving-exam-quiz",
+  "version": "1.0.0",
+  "description": "驾考刷题网页 - 含答题状态快照回溯引擎",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
+}
