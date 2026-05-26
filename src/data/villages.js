@@ -36,13 +36,13 @@ export const WIND_VECTOR = {
 export function generateDailyReports(days = 30) {
   const reports = [];
   const initialOutbreaks = [2, 5, 8, 11, 14, 17, 19];
-  
+
   for (let day = 0; day < days; day++) {
     const dailyReport = {};
-    
+
     for (const village of VILLAGES) {
       let count = 0;
-      
+
       if (day === 0) {
         if (initialOutbreaks.includes(village.id)) {
           count = Math.floor(Math.random() * 50) + 20;
@@ -50,40 +50,47 @@ export function generateDailyReports(days = 30) {
       } else {
         const prevReport = reports[day - 1];
         const prevCount = prevReport[village.id] || 0;
-        
+
         const nearbyInfected = VILLAGES.filter(v => {
           if (v.id === village.id) return false;
           const dist = Math.sqrt(
-            Math.pow(v.x - village.x, 2) + 
+            Math.pow(v.x - village.x, 2) +
             Math.pow(v.y - village.y, 2)
           );
-          return dist < 0.2 && (prevReport[v.id] || 0) > 10;
+          return dist < 0.25 && (prevReport[v.id] || 0) > 5;
         });
-        
+
         let spreadFactor = 1;
         for (const nearby of nearbyInfected) {
           const dist = Math.sqrt(
-            Math.pow(nearby.x - village.x, 2) + 
+            Math.pow(nearby.x - village.x, 2) +
             Math.pow(nearby.y - village.y, 2)
           );
-          const windDot = (nearby.x - village.x) * WIND_VECTOR.x + 
+          const windDot = (nearby.x - village.x) * WIND_VECTOR.x +
                           (nearby.y - village.y) * WIND_VECTOR.y;
-          const windBonus = windDot > 0 ? 1 + windDot * 0.5 : 1;
-          spreadFactor += (prevReport[nearby.id] || 0) / 100 * (0.3 / dist) * windBonus;
+          const windBonus = windDot > 0 ? 1 + windDot * 0.8 : 1;
+          const distanceMod = Math.exp(-dist * 1.5);
+          spreadFactor += (prevReport[nearby.id] || 0) / 500 * distanceMod * windBonus;
         }
-        
-        count = Math.floor(prevCount * spreadFactor * (0.95 + Math.random() * 0.3));
-        
-        if (Math.random() < 0.02 && day > 5) {
-          count = Math.max(count, Math.floor(Math.random() * 30) + 10);
+
+        const growthRate = Math.min(spreadFactor, 2.5);
+        const randomVariation = 0.9 + Math.random() * 0.25;
+        count = Math.floor(prevCount * growthRate * randomVariation);
+
+        if (prevCount === 0 && nearbyInfected.length > 0) {
+          const maxNearby = Math.max(...nearbyInfected.map(v => prevReport[v.id] || 0));
+          const newInfectionChance = Math.min(maxNearby / 200, 0.3);
+          if (Math.random() < newInfectionChance) {
+            count = Math.floor(Math.random() * 15) + 5;
+          }
         }
       }
-      
-      dailyReport[village.id] = Math.max(0, Math.min(count, 5000));
+
+      dailyReport[village.id] = Math.max(0, count);
     }
-    
+
     reports.push(dailyReport);
   }
-  
+
   return reports;
 }

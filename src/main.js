@@ -11,9 +11,9 @@ class Dashboard {
     this.isPlaying = false;
     this.playInterval = null;
     this.playSpeed = 1000;
-    this.dirty = true;
     this.lastSimParams = null;
-    
+    this.simulatedDay = -1;
+
     this.params = {
       spreadRate: 0.9,
       decayRate: 0.02,
@@ -21,9 +21,9 @@ class Dashboard {
       windVector: WIND_VECTOR,
       gridResolution: 80
     };
-    
+
     this.simulator = new SpreadSimulator(VILLAGES, this.params);
-    
+
     this.initCanvas();
     this.initUI();
     this.bindEvents();
@@ -176,7 +176,10 @@ class Dashboard {
     for (const village of VILLAGES) {
       const interpolatedValue = this.simulator.getInterpolatedValue(village.x, village.y);
       const rawCount = this.dailyReports[this.currentDay][village.id] || 0;
-      const calculatedCount = Math.max(rawCount, Math.floor(interpolatedValue * 12));
+
+      const scaleFactor = interpolatedValue > 0.1 ? Math.max(8, Math.log(interpolatedValue + 1) * 4) : 0;
+      const calculatedCount = Math.max(rawCount, Math.floor(interpolatedValue * scaleFactor));
+
       counts[village.id] = calculatedCount;
     }
     return counts;
@@ -279,13 +282,15 @@ class Dashboard {
   
   render(animationTime = 0) {
     const reportData = this.dailyReports[this.currentDay];
-    
+
     const simKey = `${this.currentDay}-${this.params.spreadRate}-${this.params.decayRate}-${this.params.windFactor}`;
     if (simKey !== this.lastSimParams) {
-      this.simulator.simulate(reportData, 6);
+      const needReset = Math.abs(this.currentDay - this.simulatedDay) > 1;
+      this.simulator.simulate(reportData, 8, needReset);
       this.lastSimParams = simKey;
+      this.simulatedDay = this.currentDay;
     }
-    
+
     this.mapRenderer.render(
       this.simulator,
       reportData,
@@ -299,8 +304,11 @@ class Dashboard {
 
   update() {
     const reportData = this.dailyReports[this.currentDay];
-    this.simulator.simulate(reportData, 6);
+
+    const needReset = this.simulatedDay < 0 || Math.abs(this.currentDay - this.simulatedDay) > 1;
+    this.simulator.simulate(reportData, 8, needReset);
     this.lastSimParams = `${this.currentDay}-${this.params.spreadRate}-${this.params.decayRate}-${this.params.windFactor}`;
+    this.simulatedDay = this.currentDay;
 
     this.updateHeaderStats();
     this.updateVillageList();

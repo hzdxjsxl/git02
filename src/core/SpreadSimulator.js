@@ -81,8 +81,8 @@ export class SpreadSimulator {
       const gridX = Math.floor(village.x * this.gridWidth);
       const gridY = Math.floor(village.y * this.gridHeight);
 
-      const baseIntensity = Math.log(count + 1) * 8;
-      const radius = Math.min(Math.floor(Math.sqrt(count) / 3 + 2), 12);
+      const baseIntensity = Math.log(count + 1) * 12;
+      const radius = Math.min(Math.floor(Math.sqrt(count) / 2 + 3), 18);
 
       this.injectGaussianSource(gridX, gridY, baseIntensity, radius);
     }
@@ -142,7 +142,7 @@ export class SpreadSimulator {
         }
 
         newValue *= (1 - decayRate);
-        newValue = Math.max(0, Math.min(newValue, 1000));
+        newValue = Math.max(0, newValue);
 
         this.tempField[idx] = newValue;
       }
@@ -151,12 +151,27 @@ export class SpreadSimulator {
     [this.scalarField, this.tempField] = [this.tempField, this.scalarField];
   }
 
-  simulate(reportData, iterations = 8) {
-    this.initScalarField();
+  simulate(reportData, iterations = 8, reset = true) {
+    if (reset) {
+      this.initScalarField();
+    }
     this.injectSources(reportData);
 
     for (let i = 0; i < iterations; i++) {
       this.cellularAutomatonStep();
+    }
+
+    return this.scalarField;
+  }
+
+  advanceStep(reportData) {
+    const prevField = new Float32Array(this.scalarField);
+
+    this.injectSources(reportData);
+    this.cellularAutomatonStep();
+
+    for (let i = 0; i < this.scalarField.length; i++) {
+      this.scalarField[i] = prevField[i] * 0.6 + this.scalarField[i] * 0.4;
     }
 
     return this.scalarField;
@@ -170,7 +185,7 @@ export class SpreadSimulator {
     return max;
   }
 
-  generateContourLevels(count = 8) {
+  generateContourLevels(count = 10) {
     const maxVal = this.getMaxValue();
     const levels = [];
 
