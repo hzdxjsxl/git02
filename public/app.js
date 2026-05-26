@@ -5,18 +5,19 @@ const COLORS = [
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-function createPolygon(points, fill, opacity = 0.85, className = '') {
+function createPolygon(points, fill, opacity = 0.85, className = 'funnel-segment') {
     const polygon = document.createElementNS(SVG_NS, 'polygon');
     polygon.setAttribute('points', points.map(p => `${p.x},${p.y}`).join(' '));
     polygon.setAttribute('fill', fill);
     polygon.setAttribute('opacity', opacity);
     if (className) polygon.setAttribute('class', className);
+    polygon.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
     polygon.addEventListener('mouseenter', () => polygon.setAttribute('opacity', '1'));
     polygon.addEventListener('mouseleave', () => polygon.setAttribute('opacity', opacity));
     return polygon;
 }
 
-function createText(x, y, text, fontSize = 12, anchor = 'middle', fill = '#ffffff', className = '') {
+function createText(x, y, text, fontSize = 12, anchor = 'middle', fill = '#ffffff', className = 'funnel-text') {
     const textEl = document.createElementNS(SVG_NS, 'text');
     textEl.setAttribute('x', x);
     textEl.setAttribute('y', y);
@@ -24,9 +25,23 @@ function createText(x, y, text, fontSize = 12, anchor = 'middle', fill = '#fffff
     textEl.setAttribute('fill', fill);
     textEl.setAttribute('font-size', fontSize);
     textEl.setAttribute('font-weight', '600');
-    if (className) textEl.setAttribute('class', className);
+    textEl.setAttribute('class', className);
+    textEl.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
     textEl.textContent = text;
     return textEl;
+}
+
+function createLine(x1, y1, x2, y2, stroke = '#64748b', strokeWidth = 1, className = 'funnel-leader') {
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', x1);
+    line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2);
+    line.setAttribute('y2', y2);
+    line.setAttribute('stroke', stroke);
+    line.setAttribute('stroke-width', strokeWidth);
+    line.setAttribute('class', className);
+    line.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+    return line;
 }
 
 function processChurnData(rawData) {
@@ -55,16 +70,21 @@ function processChurnData(rawData) {
     });
 }
 
+function calculateWidthAtY(y, config) {
+    const drawableHeight = config.height - config.paddingTop - config.paddingBottom;
+    const relativeY = (y - config.paddingTop) / drawableHeight;
+    const clampedY = Math.max(0, Math.min(1, relativeY));
+    return config.topWidth - (config.topWidth - config.bottomWidth) * clampedY;
+}
+
 function generateFunnelSegments(funnelData, config) {
-    const { width, height, topWidth, bottomWidth, paddingTop, paddingBottom, paddingLeft } = config;
     const totalUsers = funnelData[0].cumulative;
-    const drawableHeight = height - paddingTop - paddingBottom;
-    const widthDiff = topWidth - bottomWidth;
+    const drawableHeight = config.height - config.paddingTop - config.paddingBottom;
 
     const finalRetention = funnelData[funnelData.length - 1].cumulative - funnelData[funnelData.length - 1].count;
     const finalRetentionRate = finalRetention / totalUsers;
 
-    let currentY = paddingTop;
+    let currentY = config.paddingTop;
     const segments = [];
 
     for (let i = 0; i < funnelData.length; i++) {
@@ -74,18 +94,15 @@ function generateFunnelSegments(funnelData, config) {
         const yTop = currentY;
         const yBottom = currentY + segmentHeight;
 
-        const progressTop = (yTop - paddingTop) / drawableHeight;
-        const progressBottom = (yBottom - paddingTop) / drawableHeight;
+        const topWidthAtY = calculateWidthAtY(yTop, config);
+        const bottomWidthAtY = calculateWidthAtY(yBottom, config);
 
-        const topSegmentWidth = topWidth - widthDiff * progressTop;
-        const bottomSegmentWidth = topWidth - widthDiff * progressBottom;
+        const leftTop = { x: config.paddingLeft + (config.topWidth - topWidthAtY) / 2, y: yTop };
+        const rightTop = { x: config.paddingLeft + (config.topWidth + topWidthAtY) / 2, y: yTop };
+        const leftBottom = { x: config.paddingLeft + (config.topWidth - bottomWidthAtY) / 2, y: yBottom };
+        const rightBottom = { x: config.paddingLeft + (config.topWidth + bottomWidthAtY) / 2, y: yBottom };
 
-        const leftTop = { x: paddingLeft + (topWidth - topSegmentWidth) / 2, y: yTop };
-        const rightTop = { x: paddingLeft + (topWidth + topSegmentWidth) / 2, y: yTop };
-        const leftBottom = { x: paddingLeft + (topWidth - bottomSegmentWidth) / 2, y: yBottom };
-        const rightBottom = { x: paddingLeft + (topWidth + bottomSegmentWidth) / 2, y: yBottom };
-
-        const centerX = paddingLeft + topWidth / 2;
+        const centerX = config.paddingLeft + config.topWidth / 2;
         const centerY = segmentHeight > 0 ? yTop + segmentHeight / 2 : yTop;
 
         segments.push({
@@ -95,7 +112,10 @@ function generateFunnelSegments(funnelData, config) {
             centerX,
             centerY,
             height: segmentHeight,
-            color: COLORS[i % COLORS.length]
+            color: COLORS[i % COLORS.length],
+            yTop,
+            yBottom,
+            rightEdgeX: rightBottom.x
         });
 
         currentY = yBottom;
@@ -105,18 +125,16 @@ function generateFunnelSegments(funnelData, config) {
         const retentionHeight = finalRetentionRate * drawableHeight;
         const yTop = currentY;
         const yBottom = currentY + retentionHeight;
-        const progressTop = (yTop - paddingTop) / drawableHeight;
-        const progressBottom = (yBottom - paddingTop) / drawableHeight;
 
-        const topSegmentWidth = topWidth - widthDiff * progressTop;
-        const bottomSegmentWidth = topWidth - widthDiff * progressBottom;
+        const topWidthAtY = calculateWidthAtY(yTop, config);
+        const bottomWidthAtY = calculateWidthAtY(yBottom, config);
 
-        const leftTop = { x: paddingLeft + (topWidth - topSegmentWidth) / 2, y: yTop };
-        const rightTop = { x: paddingLeft + (topWidth + topSegmentWidth) / 2, y: yTop };
-        const leftBottom = { x: paddingLeft + (topWidth - bottomSegmentWidth) / 2, y: yBottom };
-        const rightBottom = { x: paddingLeft + (topWidth + bottomSegmentWidth) / 2, y: yBottom };
+        const leftTop = { x: config.paddingLeft + (config.topWidth - topWidthAtY) / 2, y: yTop };
+        const rightTop = { x: config.paddingLeft + (config.topWidth + topWidthAtY) / 2, y: yTop };
+        const leftBottom = { x: config.paddingLeft + (config.topWidth - bottomWidthAtY) / 2, y: yBottom };
+        const rightBottom = { x: config.paddingLeft + (config.topWidth + bottomWidthAtY) / 2, y: yBottom };
 
-        const centerX = paddingLeft + topWidth / 2;
+        const centerX = config.paddingLeft + config.topWidth / 2;
         const centerY = yTop + retentionHeight / 2;
 
         segments.push({
@@ -126,7 +144,10 @@ function generateFunnelSegments(funnelData, config) {
             centerX,
             centerY,
             height: retentionHeight,
-            color: '#22c55e'
+            color: '#22c55e',
+            yTop,
+            yBottom,
+            rightEdgeX: rightBottom.x
         });
     }
 
@@ -135,95 +156,122 @@ function generateFunnelSegments(funnelData, config) {
 
 function renderFunnel(funnelData) {
     const container = document.getElementById('funnel-content');
-    const width = 600;
-    const height = 500;
+    const width = 750;
+    const height = 550;
     const topWidth = 400;
     const bottomWidth = 80;
-    const paddingTop = 40;
-    const paddingBottom = 30;
-    const paddingLeft = 20;
-    const paddingRight = 200;
+    const paddingTop = 50;
+    const paddingBottom = 40;
+    const paddingLeft = 40;
+    const paddingRight = 280;
+
+    const config = { width, height, topWidth, bottomWidth, paddingTop, paddingBottom, paddingLeft };
 
     const svg = document.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('viewBox', `0 0 ${width + paddingRight} ${height}`);
     svg.setAttribute('class', 'funnel-svg');
 
-    const segments = generateFunnelSegments(funnelData, {
-        width, height, topWidth, bottomWidth, paddingTop, paddingBottom, paddingLeft
+    const segments = generateFunnelSegments(funnelData, config);
+
+    svg.appendChild(createText(
+        paddingLeft + topWidth / 2,
+        paddingTop - 20,
+        `${funnelData[0].cumulative}人 (100%)`,
+        13, 'middle', '#f97316'
+    ));
+
+    const churnSegments = segments.filter(s => s.type === 'churn');
+    const retentionSegment = segments.find(s => s.type === 'retention');
+
+    churnSegments.forEach(segment => {
+        const polygon = createPolygon(segment.points, segment.color, 0.85);
+        svg.appendChild(polygon);
     });
 
-    svg.appendChild(createText(paddingLeft + topWidth / 2, paddingTop - 15, `${funnelData[0].cumulative}人 (100%)`, 13, 'middle', '#f97316', 'funnel-text'));
+    if (retentionSegment) {
+        const polygon = createPolygon(retentionSegment.points, retentionSegment.color, 0.85);
+        svg.appendChild(polygon);
+    }
 
-    let churnSegments = segments.filter(s => s.type === 'churn');
+    const leaderStartX = paddingLeft + topWidth + 30;
+    const labelStartX = leaderStartX + 60;
+    const usedLabelYs = [];
+    const minLabelGap = 24;
 
     churnSegments.forEach((segment, index) => {
-        const polygon = createPolygon(segment.points, segment.color, 0.85, 'funnel-segment');
-        svg.appendChild(polygon);
-
-        if (segment.height > 25) {
+        if (segment.height >= 25) {
             svg.appendChild(createText(
                 segment.centerX,
                 segment.centerY - 4,
                 segment.data.label,
-                11, 'middle', '#ffffff', 'funnel-text'
+                11, 'middle', '#ffffff'
             ));
             svg.appendChild(createText(
                 segment.centerX,
                 segment.centerY + 10,
                 `${segment.data.count}人 (${(segment.data.churnRate * 100).toFixed(1)}%)`,
-                10, 'middle', 'rgba(255,255,255,0.9)', 'funnel-text'
+                10, 'middle', 'rgba(255,255,255,0.9)'
             ));
-        } else if (segment.height > 15) {
+        } else {
+            let labelY = segment.centerY;
+            for (let i = usedLabelYs.length - 1; i >= 0; i--) {
+                if (Math.abs(labelY - usedLabelYs[i]) < minLabelGap) {
+                    labelY = usedLabelYs[i] + minLabelGap;
+                }
+            }
+            usedLabelYs.push(labelY);
+
+            const midX = leaderStartX + 15;
+
+            const line1 = createLine(segment.rightEdgeX, segment.centerY, midX, segment.centerY, segment.color, 1.5);
+            svg.appendChild(line1);
+
+            const line2 = createLine(midX, segment.centerY, midX, labelY, segment.color, 1.5);
+            svg.appendChild(line2);
+
+            const line3 = createLine(midX, labelY, labelStartX - 5, labelY, segment.color, 1.5);
+            svg.appendChild(line3);
+
+            const dot = document.createElementNS(SVG_NS, 'circle');
+            dot.setAttribute('cx', segment.rightEdgeX);
+            dot.setAttribute('cy', segment.centerY);
+            dot.setAttribute('r', 3);
+            dot.setAttribute('fill', segment.color);
+            svg.appendChild(dot);
+
             svg.appendChild(createText(
-                segment.centerX,
-                segment.centerY + 3,
-                `${segment.data.count}人`,
-                9, 'middle', '#ffffff', 'funnel-text'
+                labelStartX,
+                labelY + 4,
+                `${segment.data.label}: ${segment.data.count}人 (${(segment.data.churnRate * 100).toFixed(1)}%)`,
+                10, 'start', '#e4e4e7'
             ));
         }
     });
 
-    const retentionSegment = segments.find(s => s.type === 'retention');
     if (retentionSegment) {
-        const polygon = createPolygon(retentionSegment.points, retentionSegment.color, 0.85, 'funnel-segment');
-        svg.appendChild(polygon);
-
-        if (retentionSegment.height > 25) {
+        if (retentionSegment.height >= 25) {
             svg.appendChild(createText(
                 retentionSegment.centerX,
                 retentionSegment.centerY - 4,
                 retentionSegment.data.label,
-                11, 'middle', '#ffffff', 'funnel-text'
+                11, 'middle', '#ffffff'
             ));
             svg.appendChild(createText(
                 retentionSegment.centerX,
                 retentionSegment.centerY + 10,
                 `${retentionSegment.data.count}人 (${(retentionSegment.data.retentionRate * 100).toFixed(1)}%)`,
-                10, 'middle', 'rgba(255,255,255,0.9)', 'funnel-text'
+                10, 'middle', 'rgba(255,255,255,0.9)'
             ));
         }
     }
 
-    churnSegments.forEach((segment, index) => {
-        const labelX = paddingLeft + topWidth + 20;
-        const labelY = segment.centerY;
-
-        const rect = document.createElementNS(SVG_NS, 'rect');
-        rect.setAttribute('x', labelX);
-        rect.setAttribute('y', labelY - 6);
-        rect.setAttribute('width', 12);
-        rect.setAttribute('height', 12);
-        rect.setAttribute('fill', segment.color);
-        rect.setAttribute('rx', 2);
-        svg.appendChild(rect);
-
-        svg.appendChild(createText(
-            labelX + 18,
-            labelY + 4,
-            `${segment.data.label}: ${(segment.data.retentionRate * 100).toFixed(1)}% → ${(segment.data.churnRate * 100).toFixed(1)}%`,
-            10, 'start', '#e4e4e7', 'funnel-text'
-        ));
-    });
+    const finalCount = funnelData[funnelData.length - 1].cumulative - funnelData[funnelData.length - 1].count;
+    svg.appendChild(createText(
+        paddingLeft + topWidth / 2,
+        height - paddingBottom + 15,
+        `最终留存: ${finalCount}人 (${(finalCount / funnelData[0].cumulative * 100).toFixed(1)}%)`,
+        12, 'middle', '#22c55e'
+    ));
 
     container.innerHTML = '';
     const wrapper = document.createElement('div');

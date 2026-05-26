@@ -105,26 +105,30 @@
             border-radius: 2px;
         }
 
-        .funnel-wrapper {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 60px;
-            flex-wrap: wrap;
-        }
-
         .funnel-svg {
             flex: 1;
-            max-width: 600px;
-            min-width: 300px;
+            max-width: 750px;
+            min-width: 400px;
         }
 
         .funnel-segment {
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .funnel-text {
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .funnel-leader {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .funnel-wrapper {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
         }
 
         .funnel-legend {
