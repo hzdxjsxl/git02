@@ -46,6 +46,29 @@ export class SpreadSimulator {
     }
   }
 
+  getInterpolatedValue(mapX, mapY) {
+    const gx = mapX * this.gridWidth;
+    const gy = mapY * this.gridHeight;
+
+    const x0 = Math.floor(gx);
+    const y0 = Math.floor(gy);
+    const x1 = Math.min(x0 + 1, this.gridWidth - 1);
+    const y1 = Math.min(y0 + 1, this.gridHeight - 1);
+
+    const fx = gx - x0;
+    const fy = gy - y0;
+
+    const v00 = this.getValue(x0, y0);
+    const v10 = this.getValue(x1, y0);
+    const v01 = this.getValue(x0, y1);
+    const v11 = this.getValue(x1, y1);
+
+    const top = v00 * (1 - fx) + v10 * fx;
+    const bottom = v01 * (1 - fx) + v11 * fx;
+
+    return top * (1 - fy) + bottom * fy;
+  }
+
   updateParams(params) {
     Object.assign(this.options, params);
   }
@@ -237,46 +260,101 @@ export class SpreadSimulator {
     const segments = this.marchingSquares(level);
     if (segments.length === 0) return [];
 
+    const endpointMap = new Map();
+    const segmentData = segments.map((seg, idx) => {
+      const p0 = { ...seg[0], segIdx: idx, end: 0 };
+      const p1 = { ...seg[1], segIdx: idx, end: 1 };
+      return { seg, p0, p1 };
+    });
+
+    for (const sd of segmentData) {
+      const key0 = `${sd.p0.x.toFixed(2)}_${sd.p0.y.toFixed(2)}`;
+      const key1 = `${sd.p1.x.toFixed(2)}_${sd.p1.y.toFixed(2)}`;
+
+      if (!endpointMap.has(key0)) endpointMap.set(key0, []);
+      if (!endpointMap.has(key1)) endpointMap.set(key1, []);
+
+      endpointMap.get(key0).push({ point: sd.p0, other: sd.p1, segIdx: sd.p0.segIdx });
+      endpointMap.get(key1).push({ point: sd.p1, other: sd.p0, segIdx: sd.p1.segIdx });
+    }
+
+    const usedSegments = new Set();
     const paths = [];
-    const used = new Set();
 
-    for (let i = 0; i < segments.length; i++) {
-      if (used.has(i)) continue;
+    const buildPath = (startPoint, isClosed = true) => {
+      const path = [{ x: startPoint.x, y: startPoint.y }];
+      let current = startPoint;
 
-      const path = [segments[i][0], segments[i][1]];
-      used.add(i);
+      let safety = 0;
+      const maxIterations = segments.length * 2;
 
-      let extended = true;
-      while (extended) {
-        extended = false;
+      while (safety < maxIterations) {
+        safety++;
+        const key = `${current.x.toFixed(2)}_${current.y.toFixed(2)}`;
+        const connections = endpointMap.get(key);
 
-        const lastPoint = path[path.length - 1];
-        for (let j = 0; j < segments.length; j++) {
-          if (used.has(j)) continue;
+        if (!connections || connections.length === 0) break;
 
-          const seg = segments[j];
-          const d1 = this.pointDistance(lastPoint, seg[0]);
-          const d2 = this.pointDistance(lastPoint, seg[1]);
+        let nextConnection = null;
 
-          if (d1 < 1.5) {
-            path.push(seg[1]);
-            used.add(j);
-            extended = true;
-            break;
-          } else if (d2 < 1.5) {
-            path.push(seg[0]);
-            used.add(j);
-            extended = true;
-            break;
+        for (const conn of connections) {
+          if (usedSegments.has(conn.segIdx)) continue;
+
+          if (path.length > 1) {
+            const prev = path[path.length - 2];
+            const dx = conn.other.x - current.x;
+            const dy = conn.other.y - current.y;
+            const prevDx = current.x - prev.x;
+            const prevDy = current.y - prev.y;
+
+            const dotProduct = dx * prevDx + dy * prevDy;
+            const len1 = Math.sqrt(dx * dx + dy * dy);
+            const len2 = Math.sqrt(prevDx * prevDx + prevDy * prevDy);
+
+            if (len1 > 0 && len2 > 0) {
+              const cosAngle = dotProduct / (len1 * len2);
+              if (cosAngle < -0.5) continue;
+            }
+          }
+
+          nextConnection = conn;
+          break;
+        }
+
+        if (!nextConnection) {
+          for (const conn of connections) {
+            if (!usedSegments.has(conn.segIdx)) {
+              nextConnection = conn;
+              break;
+            }
+          }
+        }
+
+        if (!nextConnection) break;
+
+        usedSegments.add(nextConnection.segIdx);
+        path.push({ x: nextConnection.other.x, y: nextConnection.other.y });
+        current = nextConnection.other;
+
+        if (isClosed) {
+          const first = path[0];
+          const last = path[path.length - 1];
+          const dist = Math.sqrt((first.x - last.x) ** 2 + (first.y - last.y) ** 2);
+          if (dist < 1.5 && path.length >= 3) {
+            path.push({ x: first.x, y: first.y });
+            return path;
           }
         }
       }
 
-      const firstPoint = path[0];
-      const finalPoint = path[path.length - 1];
-      if (this.pointDistance(firstPoint, finalPoint) < 2) {
-        path.push({ ...firstPoint });
-      }
+      return path;
+    };
+
+    for (const sd of segmentData) {
+      if (usedSegments.has(sd.p0.segIdx)) continue;
+
+      usedSegments.add(sd.p0.segIdx);
+      const path = buildPath(sd.p0, true);
 
       if (path.length >= 3) {
         paths.push(path);

@@ -15,9 +15,9 @@ class Dashboard {
     this.lastSimParams = null;
     
     this.params = {
-      spreadRate: 0.8,
-      decayRate: 0.03,
-      windFactor: 0.3,
+      spreadRate: 0.9,
+      decayRate: 0.02,
+      windFactor: 0.8,
       windVector: WIND_VECTOR,
       gridResolution: 80
     };
@@ -171,56 +171,71 @@ class Dashboard {
     }
   }
   
+  getInterpolatedCounts() {
+    const counts = {};
+    for (const village of VILLAGES) {
+      const interpolatedValue = this.simulator.getInterpolatedValue(village.x, village.y);
+      const rawCount = this.dailyReports[this.currentDay][village.id] || 0;
+      const calculatedCount = Math.max(rawCount, Math.floor(interpolatedValue * 12));
+      counts[village.id] = calculatedCount;
+    }
+    return counts;
+  }
+
   updateVillageList() {
     const list = document.getElementById('village-list');
     list.innerHTML = '';
-    
+
+    const interpolatedCounts = this.getInterpolatedCounts();
+
     const villagesWithCount = VILLAGES.map(v => ({
       ...v,
-      count: this.dailyReports[this.currentDay][v.id] || 0
+      count: interpolatedCounts[v.id] || 0
     })).sort((a, b) => b.count - a.count);
-    
+
     for (const village of villagesWithCount) {
       const item = document.createElement('div');
       item.className = 'village-item';
-      
+
       let level = 0;
       if (village.count > 500) level = 3;
       else if (village.count > 100) level = 2;
       else if (village.count > 0) level = 1;
-      
+
       item.innerHTML = `
         <span class="name">${village.name}</span>
         <span class="count level-${level}">${village.count}</span>
       `;
-      
+
       item.addEventListener('click', () => {
         this.selectedVillageId = village.id;
         this.update();
       });
-      
+
       list.appendChild(item);
     }
   }
-  
+
   updateRiskList() {
     const list = document.getElementById('risk-list');
     list.innerHTML = '';
-    
+
+    const interpolatedCounts = this.getInterpolatedCounts();
+
     const riskyVillages = VILLAGES
       .map(v => ({
         ...v,
-        count: this.dailyReports[this.currentDay][v.id] || 0
+        count: interpolatedCounts[v.id] || 0
       }))
       .filter(v => v.count > 100)
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-    
+
     if (riskyVillages.length === 0) {
       list.innerHTML = '<div style="color: #64748b; font-size: 12px; text-align: center; padding: 20px;">暂无高风险区域</div>';
       return;
     }
-    
+
     for (const village of riskyVillages) {
       const item = document.createElement('div');
       item.className = 'risk-item';
@@ -283,11 +298,14 @@ class Dashboard {
   }
 
   update() {
+    const reportData = this.dailyReports[this.currentDay];
+    this.simulator.simulate(reportData, 6);
+    this.lastSimParams = `${this.currentDay}-${this.params.spreadRate}-${this.params.decayRate}-${this.params.windFactor}`;
+
     this.updateHeaderStats();
     this.updateVillageList();
     this.updateRiskList();
     this.updateTimeline();
-    this.lastSimParams = null;
     this.render(Date.now() / 1500);
   }
 

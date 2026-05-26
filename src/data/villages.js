@@ -35,7 +35,7 @@ export const WIND_VECTOR = {
 
 export function generateDailyReports(days = 30) {
   const reports = [];
-  const initialOutbreaks = [5, 9, 17];
+  const initialOutbreaks = [2, 5, 8, 11, 14, 17, 19];
   
   for (let day = 0; day < days; day++) {
     const dailyReport = {};
