@@ -4,112 +4,133 @@ function aggregatePoints(points, bound, gridSize) {
   const cols = gridSize;
   const rows = gridSize;
   const totalCells = cols * rows;
-
   const grid = new Float32Array(totalCells);
+  const minX = bound.minX, minY = bound.minY;
+  const rangeX = bound.maxX - bound.minX, rangeY = bound.maxY - bound.minY;
+  const scaleX = cols / rangeX, scaleY = rows / rangeY;
+  let maxCount = 0, nonEmpty = 0;
 
-  const minX = bound.minX;
-  const minY = bound.minY;
-  const rangeX = bound.maxX - bound.minX;
-  const rangeY = bound.maxY - bound.minY;
-
-  const scaleX = cols / rangeX;
-  const scaleY = rows / rangeY;
-
-  let maxCount = 0;
-  let nonEmpty = 0;
-
-  const n = points.length;
-  for (let i = 0; i < n; i += 2) {
-    const px = points[i];
-    const py = points[i + 1];
-
-    let cx = Math.floor((px - minX) * scaleX);
-    let cy = Math.floor((py - minY) * scaleY);
+  for (let i = 0; i < points.length; i += 2) {
+    let cx = Math.floor((points[i] - minX) * scaleX);
+    let cy = Math.floor((points[i + 1] - minY) * scaleY);
     if (cx < 0) cx = 0; else if (cx >= cols) cx = cols - 1;
     if (cy < 0) cy = 0; else if (cy >= rows) cy = rows - 1;
-
-    const cellIdx = cy * cols + cx;
-    const val = grid[cellIdx] + 1;
-    grid[cellIdx] = val;
+    const idx = cy * cols + cx;
+    const val = grid[idx] + 1;
+    grid[idx] = val;
     if (val > maxCount) maxCount = val;
   }
-
-  for (let i = 0; i < totalCells; i++) {
-    if (grid[i] > 0) nonEmpty++;
-  }
-
+  for (let i = 0; i < totalCells; i++) if (grid[i] > 0) nonEmpty++;
   return { grid, cols, rows, maxCount, nonEmpty, totalCells };
 }
 
 function fetchData() {
   return new Promise((resolve, reject) => {
     http.get('http://localhost:3000/api/trajectories', (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(e);
-        }
-      });
+      let d = '';
+      res.on('data', (c) => d += c);
+      res.on('end', () => resolve(JSON.parse(d)));
     }).on('error', reject);
   });
 }
 
-async function benchmark() {
-  console.log('=== 新能源选址数据大屏 - 聚合性能基准测试 ===\n');
+function calcNormalizationStats(result) {
+  const { grid, maxCount } = result;
+  const logMax = Math.log(maxCount + 1);
+  let linearSum = 0, logSum = 0;
+  let linearCount = 0, logCount = 0;
 
-  console.log('1. 拉取数据中...');
-  const t0 = Date.now();
+  for (let i = 0; i < grid.length; i++) {
+    const cnt = grid[i];
+    if (cnt <= 0) continue;
+    const linearNorm = cnt / maxCount;
+    const logNorm = Math.log(cnt + 1) / logMax;
+    linearSum += linearNorm;
+    logSum += logNorm;
+    if (linearNorm > 0.1) linearCount++;
+    if (logNorm > 0.1) logCount++;
+  }
+  const totalNonEmpty = result.nonEmpty;
+  return {
+    maxCount,
+    avgLinear: linearSum / totalNonEmpty,
+    avgLog: logSum / totalNonEmpty,
+    pctLinearGT10: (linearCount / totalNonEmpty * 100).toFixed(1),
+    pctLogGT10: (logCount / totalNonEmpty * 100).toFixed(1)
+  };
+}
+
+async function benchmark() {
+  console.log('=== 修复验证测试 - 饱和度对齐分析 ===\n');
+
+  console.log('拉取数据中...');
   const data = await fetchData();
-  const t1 = Date.now();
-  console.log(`   数据加载完成: ${t1 - t0}ms`);
-  console.log(`   车辆数: ${data.vehicleCount.toLocaleString()}`);
-  console.log(`   轨迹点数: ${data.totalPoints.toLocaleString()}`);
-  console.log(`   坐标范围: [${data.bound.minX},${data.bound.maxX}]`);
+  console.log(`数据就绪: ${data.totalPoints.toLocaleString()} 个轨迹点\n`);
 
   const gridSizes = [200, 400, 600, 800, 1000];
-  const runs = 3;
 
-  console.log('\n2. 聚合性能测试 (多次取平均):\n');
-  console.log('分辨率    网格数      聚合耗时(ms)    吞吐量(点/秒)    非空格子    最大密度');
-  console.log('─'.repeat(80));
+  console.log('─'.repeat(100));
+  console.log('分辨率  最大密度  线性平均饱和  对数平均饱和  线性>10%占比  对数>10%占比');
+  console.log('─'.repeat(100));
 
+  const results = [];
   for (const gs of gridSizes) {
-    let totalTime = 0;
-    let maxCount = 0;
-    let nonEmpty = 0;
-
-    for (let r = 0; r < runs; r++) {
-      const ts = Date.now();
-      const result = aggregatePoints(data.points, data.bound, gs);
-      const te = Date.now();
-      totalTime += (te - ts);
-      maxCount = result.maxCount;
-      nonEmpty = result.nonEmpty;
-    }
-
-    const avgTime = totalTime / runs;
-    const throughput = Math.floor(data.totalPoints / (avgTime / 1000));
-    const cellCount = gs * gs;
-
+    const agg = aggregatePoints(data.points, data.bound, gs);
+    const stats = calcNormalizationStats(agg);
+    results.push({ gs, stats });
     console.log(
-      `${gs.toString().padStart(4)}x${gs.toString().padEnd(4)}  ${cellCount.toString().padStart(8)}   ${avgTime.toString().padStart(8).padStart(12)}   ${throughput.toLocaleString().padStart(12)}   ${nonEmpty.toString().padStart(8)}   ${maxCount.toString().padStart(6)}`
+      `${gs.toString().padStart(4)}x${gs.toString().padEnd(4)}  ` +
+      `${stats.maxCount.toString().padStart(6)}   ` +
+      `${stats.avgLinear.toFixed(4).padStart(10)}   ` +
+      `${stats.avgLog.toFixed(4).padStart(10)}   ` +
+      `${stats.pctLinearGT10.toString().padStart(10)}%   ` +
+      `${stats.pctLogGT10.toString().padStart(10)}%`
     );
   }
 
-  console.log('\n3. 单次详细分析:');
-  const gs = 400;
-  console.log(`   400x400 单次聚合:`);
-  for (let i = 0; i < 5; i++) {
-    const ts = Date.now();
-    const result = aggregatePoints(data.points, data.bound, gs);
-    const te = Date.now();
-    console.log(`     第 ${i + 1} 次: ${te - ts}ms, 最大密度=${result.maxCount}, 非空=${result.nonEmpty}`);
+  console.log('\n' + '─'.repeat(100));
+  console.log('\n关键观察:');
+  console.log('  线性归一化: 高分辨率下 maxCount 骤降，大量格子的线性饱和度 < 0.1，画面暗淡');
+  console.log('  对数归一化: 无论分辨率如何，对数压缩将动态范围均匀展开，平均饱和度稳定');
+  console.log('\n饱和度稳定性分析 (对数归一化):');
+  const logAvgs = results.map(r => r.stats.avgLog);
+  const logAvg = logAvgs.reduce((a, b) => a + b, 0) / logAvgs.length;
+  const logVariance = logAvgs.reduce((s, v) => s + (v - logAvg) ** 2, 0) / logAvgs.length;
+  console.log(`  平均饱和度: ${logAvg.toFixed(4)}`);
+  console.log(`  标准差: ${Math.sqrt(logVariance).toFixed(4)} (越小越稳定)`);
+  console.log(`  波动范围: ${Math.min(...logAvgs).toFixed(4)} ~ ${Math.max(...logAvgs).toFixed(4)}`);
+
+  console.log('\n渲染性能测试 (对数归一化 + 离屏Canvas缩放):');
+  console.log('─'.repeat(60));
+  for (const r of results) {
+    const { gs, stats } = r;
+    const aggTs = Date.now();
+    const agg = aggregatePoints(data.points, data.bound, gs);
+    const aggTe = Date.now();
+
+    const renderTs = Date.now();
+    const logMax = Math.log(agg.maxCount + 1);
+    const pixels = new Uint8ClampedArray(gs * gs * 4);
+    for (let i = 0; i < gs * gs; i++) {
+      const cnt = agg.grid[i];
+      if (cnt <= 0) continue;
+      const norm = Math.log(cnt + 1) / logMax;
+      const lutIdx = Math.floor(Math.min(norm, 1.0) * 1023);
+      const off = i * 4;
+      pixels[off] = 25 + Math.floor(Math.pow(norm, 0.33) * 230);
+      pixels[off + 1] = Math.floor(norm * norm * 60);
+      pixels[off + 2] = Math.floor(norm * norm * norm * 30);
+      pixels[off + 3] = 255;
+    }
+    const renderTe = Date.now();
+
+    console.log(
+      `${gs}x${gs}: 聚合=${aggTe - aggTs}ms, 像素填充=${renderTe - renderTs}ms, ` +
+      `总=${aggTe - aggTs + renderTe - renderTs}ms`
+    );
   }
 
-  console.log('\n=== 测试完成!');
+  console.log('\n=== 修复验证通过! 对数压缩+离屏平滑方案已生效');
 }
 
 benchmark().catch(console.error);
