@@ -254,8 +254,11 @@
         const points = path.projectedPoints;
         if (points.length < 2) return;
         
-        const baseOpacity = isDimmed ? 0.1 : (isSelected ? 1 : 0.6);
-        const lineWidth = isSelected ? 3 : 1.5;
+        const baseOpacity = isDimmed ? 0.08 : (isSelected ? 0.9 : 0.35);
+        const lineWidth = isSelected ? 3 : 1.2;
+        
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
         
         for (let i = 1; i < points.length; i++) {
             const prevPoint = points[i - 1];
@@ -274,9 +277,14 @@
             ctx.stroke();
         }
         
+        ctx.restore();
+        
         const lastPoint = points[points.length - 1];
         const maxWind = Math.max(...points.map(p => p.windSpeed));
-        const maxColor = getWindColor(maxWind, baseOpacity);
+        const maxColor = getWindColor(maxWind, baseOpacity * 1.5);
+        
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
         
         ctx.beginPath();
         ctx.arc(lastPoint.screenX, lastPoint.screenY, isSelected ? 6 : 4, 0, Math.PI * 2);
@@ -287,9 +295,11 @@
         ctx.arc(lastPoint.screenX, lastPoint.screenY, isSelected ? 10 : 6, 0, Math.PI * 2);
         ctx.strokeStyle = maxColor;
         ctx.lineWidth = 2;
-        ctx.globalAlpha = baseOpacity * 0.5;
+        ctx.globalAlpha = baseOpacity * 0.6;
         ctx.stroke();
         ctx.globalAlpha = 1;
+        
+        ctx.restore();
     }
 
     function drawTyphoonLabel(path, isDimmed) {
@@ -312,29 +322,29 @@
         
         if (normalized < 0.2) {
             const t = normalized / 0.2;
-            r = Math.round(34 + t * (132 - 34));
-            g = Math.round(197 + t * (204 - 197));
-            b = Math.round(94 + t * (22 - 94));
+            r = Math.round(140 + t * (200 - 140));
+            g = Math.round(220 + t * (230 - 220));
+            b = Math.round(200 + t * (180 - 200));
         } else if (normalized < 0.4) {
             const t = (normalized - 0.2) / 0.2;
-            r = Math.round(132 + t * (234 - 132));
-            g = Math.round(204 + t * (179 - 204));
-            b = Math.round(22 + t * (8 - 22));
+            r = Math.round(200 + t * (255 - 200));
+            g = Math.round(230 + t * (210 - 230));
+            b = Math.round(180 - t * (180 - 120));
         } else if (normalized < 0.6) {
             const t = (normalized - 0.4) / 0.2;
-            r = Math.round(234 + t * (249 - 234));
-            g = Math.round(179 + t * (115 - 179));
-            b = Math.round(8 + t * (22 - 8));
+            r = 255;
+            g = Math.round(210 - t * (210 - 140));
+            b = Math.round(120 - t * (120 - 60));
         } else if (normalized < 0.8) {
             const t = (normalized - 0.6) / 0.2;
-            r = Math.round(249 + t * (239 - 249));
-            g = Math.round(115 + t * (68 - 115));
-            b = Math.round(22 + t * (68 - 22));
+            r = Math.round(255 - t * (255 - 180));
+            g = Math.round(140 - t * (140 - 60));
+            b = Math.round(60 - t * (60 - 30));
         } else {
             const t = (normalized - 0.8) / 0.2;
-            r = Math.round(239 + t * (220 - 239));
-            g = Math.round(68 + t * (38 - 68));
-            b = Math.round(68 + t * (38 - 68));
+            r = Math.round(180 - t * (180 - 60));
+            g = Math.round(60 - t * (60 - 20));
+            b = Math.round(30 - t * (30 - 10));
         }
         
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
