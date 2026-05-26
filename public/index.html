@@ -119,6 +119,14 @@
             min-width: 300px;
         }
 
+        .funnel-segment {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .funnel-text {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
         .funnel-legend {
             flex: 0 0 auto;
             min-width: 280px;
@@ -209,6 +217,31 @@
         .refresh-btn:active {
             transform: translateY(0);
         }
+
+        .test-btn {
+            padding: 12px 24px;
+            background: transparent;
+            border: 2px solid rgba(239, 68, 68, 0.6);
+            border-radius: 8px;
+            color: #fca5a5;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .test-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+            color: #f87171;
+        }
+
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
     </style>
 </head>
 <body>
@@ -230,7 +263,10 @@
             </div>
         </div>
 
-        <button class="refresh-btn" onclick="loadData()">🔄 刷新数据</button>
+        <div class="btn-group">
+            <button class="refresh-btn" onclick="loadData()">🔄 刷新数据</button>
+            <button class="test-btn" onclick="loadData(true)">⚠️ 测试零留存模式</button>
+        </div>
     </div>
 
     <script src="app.js"></script>

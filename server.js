@@ -5,9 +5,24 @@ const PORT = 8088;
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-function generateChurnData() {
+function generateChurnData(zeroRetention = false) {
   const totalUsers = 1000;
   const data = [];
+  
+  if (zeroRetention) {
+    for (let i = 0; i < totalUsers; i++) {
+      const rand = Math.random();
+      if (rand < 0.15) data.push(1);
+      else if (rand < 0.35) data.push(2);
+      else if (rand < 0.55) data.push(3);
+      else if (rand < 0.72) data.push(4);
+      else if (rand < 0.85) data.push(5);
+      else if (rand < 0.94) data.push(6);
+      else data.push(7);
+    }
+    return data;
+  }
+  
   for (let i = 0; i < totalUsers; i++) {
     const rand = Math.random();
     if (rand < 0.25) data.push(1);
@@ -23,7 +38,8 @@ function generateChurnData() {
 }
 
 app.get('/api/churn-data', (req, res) => {
-  res.json(generateChurnData());
+  const zeroRetention = req.query.zero === '1';
+  res.json(generateChurnData(zeroRetention));
 });
 
 app.listen(PORT, () => {
