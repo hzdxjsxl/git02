@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新能源选址数据大屏 - 车辆轨迹热力图</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; font-family: "Microsoft YaHei", sans-serif; background: #0a0e1a; color: #e0e6ed; }
+
+  .dashboard { display: flex; flex-direction: column; width: 100%; height: 100vh; }
+
+  .header {
+    background: linear-gradient(90deg, #0d1b2a 0%, #1b263b 100%);
+    padding: 10px 24px; display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 2px solid #00d4ff; box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+  }
+  .header h1 { font-size: 20px; letter-spacing: 4px; color: #00d4ff; font-weight: 600; }
+  .header .subtitle { font-size: 12px; color: #7a8ba0; letter-spacing: 2px; }
+
+  .main { flex: 1; display: flex; overflow: hidden; }
+
+  .sidebar {
+    width: 260px; background: #0d1b2a; border-right: 1px solid #1b263b;
+    padding: 16px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .panel { background: #1b263b; border-radius: 6px; padding: 14px; border: 1px solid #2a3a52; }
+  .panel-title { font-size: 13px; color: #00d4ff; margin-bottom: 10px; letter-spacing: 2px; border-left: 3px solid #00d4ff; padding-left: 8px; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: #a0b0c0; }
+  .stat-row .val { color: #ff4757; font-weight: bold; font-family: monospace; }
+  .stat-row .val.green { color: #2ed573; }
+
+  .control-group { margin-bottom: 10px; }
+  .control-group label { display: block; font-size: 12px; color: #a0b0c0; margin-bottom: 4px; }
+  .control-group input[type="range"] { width: 100%; accent-color: #00d4ff; }
+  .control-group .range-val { font-size: 12px; color: #00d4ff; text-align: right; font-family: monospace; }
+
+  .btn {
+    background: linear-gradient(135deg, #00d4ff, #0099cc);
+    border: none; color: #0a0e1a; padding: 8px 16px; border-radius: 4px;
+    cursor: pointer; font-size: 13px; font-weight: bold; letter-spacing: 1px;
+    transition: all 0.2s; width: 100%;
+  }
+  .btn:hover { box-shadow: 0 0 15px rgba(0, 212, 255, 0.5); transform: translateY(-1px); }
+  .btn:disabled { background: #2a3a52; color: #5a6a7a; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .canvas-container { flex: 1; position: relative; background: #0a0e1a; }
+  #heatmapCanvas { display: block; width: 100%; height: 100%; }
+
+  .overlay-stats {
+    position: absolute; top: 12px; right: 12px; background: rgba(13, 27, 42, 0.85);
+    border: 1px solid #00d4ff; border-radius: 6px; padding: 10px 14px; font-size: 12px;
+    backdrop-filter: blur(4px);
+  }
+  .overlay-stats .label { color: #7a8ba0; }
+  .overlay-stats .value { color: #00d4ff; font-family: monospace; font-weight: bold; }
+
+  .loading-overlay {
+    position: absolute; inset: 0; background: rgba(10, 14, 26, 0.95);
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 20px;
+    z-index: 100;
+  }
+  .spinner {
+    width: 50px; height: 50px; border: 3px solid #1b263b; border-top-color: #00d4ff;
+    border-radius: 50%; animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: #00d4ff; font-size: 14px; letter-spacing: 2px; }
+  .loading-sub { color: #7a8ba0; font-size: 12px; }
+
+  .color-legend {
+    position: absolute; bottom: 12px; left: 12px; display: flex; align-items: center;
+    background: rgba(13, 27, 42, 0.85); border: 1px solid #2a3a52; border-radius: 6px; padding: 8px 12px;
+    backdrop-filter: blur(4px);
+  }
+  .color-bar {
+    width: 200px; height: 14px; border-radius: 2px;
+    background: linear-gradient(90deg, #1a0000 0%, #400000 15%, #800000 30%, #b30000 50%, #e60000 70%, #ff1a1a 85%, #ff4d4d 100%);
+  }
+  .legend-labels { display: flex; justify-content: space-between; font-size: 10px; color: #7a8ba0; margin-top: 4px; }
+  .legend-title { font-size: 11px; color: #a0b0c0; margin-right: 12px; letter-spacing: 1px; }
+
+  .perf-panel .metric { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; }
+  .perf-panel .metric .m-label { color: #7a8ba0; }
+  .perf-panel .metric .m-value { color: #ff4757; font-family: monospace; }
+  .perf-panel .metric .m-value.good { color: #2ed573; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #0d1b2a; }
+  ::-webkit-scrollbar-thumb { background: #2a3a52; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="dashboard">
+  <div class="header">
+    <h1>新能源选址数据大屏</h1>
+    <span class="subtitle">VEHICLE TRAJECTORY HEATMAP · 城市级车辆轨迹分析</span>
+  </div>
+  <div class="main">
+    <div class="sidebar">
+      <div class="panel">
+        <div class="panel-title">数据概况</div>
+        <div class="stat-row"><span>车辆总数</span><span class="val" id="vehicleCount">--</span></div>
+        <div class="stat-row"><span>轨迹点总数</span><span class="val" id="pointCount">--</span></div>
+        <div class="stat-row"><span>网格分辨率</span><span class="val green" id="gridResLabel">--</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">分辨率控制</div>
+        <div class="control-group">
+          <label>网格大小 (每边像素数)</label>
+          <input type="range" id="gridSize" min="100" max="1000" value="400" step="10">
+          <div class="range-val" id="gridSizeVal">400 × 400</div>
+        </div>
+        <div class="control-group">
+          <label>色阶增强系数</label>
+          <input type="range" id="colorBoost" min="1" max="10" value="3" step="0.5">
+          <div class="range-val" id="colorBoostVal">3.0x</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">操作</div>
+        <button class="btn" id="loadBtn">加载数据并渲染</button>
+      </div>
+
+      <div class="panel perf-panel">
+        <div class="panel-title">性能指标</div>
+        <div class="metric"><span class="m-label">数据传输</span><span class="m-value" id="perfTransmit">--</span></div>
+        <div class="metric"><span class="m-label">数据解析</span><span class="m-value" id="perfParse">--</span></div>
+        <div class="metric"><span class="m-label">网格聚合</span><span class="m-value good" id="perfAggregate">--</span></div>
+        <div class="metric"><span class="m-label">画布渲染</span><span class="m-value good" id="perfRender">--</span></div>
+        <div class="metric"><span class="m-label">总耗时</span><span class="m-value good" id="perfTotal">--</span></div>
+        <div class="metric"><span class="m-label">聚合吞吐量</span><span class="m-value" id="perfThroughput">--</span></div>
+      </div>
+    </div>
+
+    <div class="canvas-container">
+      <canvas id="heatmapCanvas"></canvas>
+      <div class="overlay-stats">
+        <div><span class="label">网格总数:</span> <span class="value" id="cellCount">--</span></div>
+        <div><span class="label">最大密度:</span> <span class="value" id="maxDensity">--</span></div>
+        <div><span class="label">非空格子:</span> <span class="value" id="nonEmptyCells">--</span></div>
+      </div>
+      <div class="color-legend">
+        <span class="legend-title">密度</span>
+        <div>
+          <div class="color-bar"></div>
+          <div class="legend-labels"><span>低</span><span>高</span></div>
+        </div>
+      </div>
+      <div class="loading-overlay" id="loadingOverlay" style="display:none;">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">正在加载数据...</div>
+        <div class="loading-sub" id="loadingSub">请稍候</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById('heatmapCanvas');
+  const ctx = canvas.getContext('2d');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const loadingText = document.getElementById('loadingText');
+  const loadingSub = document.getElementById('loadingSub');
+  const loadBtn = document.getElementById('loadBtn');
+  const gridSizeSlider = document.getElementById('gridSize');
+  const gridSizeVal = document.getElementById('gridSizeVal');
+  const colorBoostSlider = document.getElementById('colorBoost');
+  const colorBoostVal = document.getElementById('colorBoostVal');
+
+  let trajectoryData = null;
+  let currentGridSize = 400;
+  let currentColorBoost = 3.0;
+
+  function resizeCanvas() {
+    const container = canvas.parentElement;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = container.clientWidth * dpr;
+    canvas.height = container.clientHeight * dpr;
+    canvas.style.width = container.clientWidth + 'px';
+    canvas.style.height = container.clientHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resizeCanvas);
+
+  function showLoading(text, sub) {
+    loadingOverlay.style.display = 'flex';
+    loadingText.textContent = text;
+    loadingSub.textContent = sub || '';
+  }
+  function hideLoading() { loadingOverlay.style.display = 'none'; }
+
+  function setPerf(id, value, unit, good) {
+    const el = document.getElementById(id);
+    el.textContent = value + (unit || '');
+    el.className = 'm-value' + (good ? ' good' : '');
+  }
+
+  function buildColorLUT(boost) {
+    const size = 1024;
+    const lut = new Uint8ClampedArray(size * 4);
+    for (let i = 0; i < size; i++) {
+      const t = Math.pow(i / (size - 1), 1.0 / boost);
+      const r = Math.floor(25 + t * 230);
+      const g = Math.floor(t * t * 60);
+      const b = Math.floor(t * t * t * 30);
+      const idx = i * 4;
+      lut[idx] = r;
+      lut[idx + 1] = g;
+      lut[idx + 2] = b;
+      lut[idx + 3] = 255;
+    }
+    return lut;
+  }
+
+  function aggregatePoints(points, bound, gridSize) {
+    const cols = gridSize;
+    const rows = gridSize;
+    const totalCells = cols * rows;
+
+    const grid = new Float32Array(totalCells);
+
+    const minX = bound.minX;
+    const minY = bound.minY;
+    const rangeX = bound.maxX - bound.minX;
+    const rangeY = bound.maxY - bound.minY;
+
+    const scaleX = cols / rangeX;
+    const scaleY = rows / rangeY;
+
+    let maxCount = 0;
+    let nonEmpty = 0;
+
+    const n = points.length;
+    for (let i = 0; i < n; i += 2) {
+      const px = points[i];
+      const py = points[i + 1];
+
+      let cx = Math.floor((px - minX) * scaleX);
+      let cy = Math.floor((py - minY) * scaleY);
+      if (cx < 0) cx = 0; else if (cx >= cols) cx = cols - 1;
+      if (cy < 0) cy = 0; else if (cy >= rows) cy = rows - 1;
+
+      const cellIdx = cy * cols + cx;
+      const val = grid[cellIdx] + 1;
+      grid[cellIdx] = val;
+      if (val > maxCount) maxCount = val;
+    }
+
+    for (let i = 0; i < totalCells; i++) {
+      if (grid[i] > 0) nonEmpty++;
+    }
+
+    return { grid, cols, rows, maxCount, nonEmpty, totalCells };
+  }
+
+  function renderHeatmap(aggResult, colorBoost) {
+    const { grid, cols, rows, maxCount } = aggResult;
+    const container = canvas.parentElement;
+    const dispW = container.clientWidth;
+    const dispH = container.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+
+    const cellW = dispW / cols;
+    const cellH = dispH / rows;
+
+    const lut = buildColorLUT(colorBoost);
+
+    const imgW = Math.ceil(dispW * dpr);
+    const imgH = Math.ceil(dispH * dpr);
+
+    const imageData = ctx.createImageData(imgW, imgH);
+    const data = imageData.data;
+
+    const scaleX = dpr;
+    const scaleY = dpr;
+
+    if (maxCount > 0) {
+      const normFactor = 1023 / maxCount;
+
+      for (let cy = 0; cy < rows; cy++) {
+        const y0 = cy * cellH;
+        const y1 = (cy + 1) * cellH;
+        const py0 = Math.floor(y0 * scaleY);
+        const py1 = Math.min(Math.ceil(y1 * scaleY), imgH);
+
+        for (let cx = 0; cx < cols; cx++) {
+          const count = grid[cy * cols + cx];
+          if (count === 0) continue;
+
+          const norm = Math.min(Math.floor(count * normFactor), 1023);
+          const lutIdx = norm * 4;
+          const r = lut[lutIdx];
+          const g = lut[lutIdx + 1];
+          const b = lut[lutIdx + 2];
+          const a = lut[lutIdx + 3];
+
+          const x0 = cx * cellW;
+          const x1 = (cx + 1) * cellW;
+          const px0 = Math.floor(x0 * scaleX);
+          const px1 = Math.min(Math.ceil(x1 * scaleX), imgW);
+
+          for (let py = py0; py < py1; py++) {
+            const rowOff = py * imgW * 4;
+            for (let px = px0; px < px1; px++) {
+              const off = rowOff + px * 4;
+              data[off] = r;
+              data[off + 1] = g;
+              data[off + 2] = b;
+              data[off + 3] = a;
+            }
+          }
+        }
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  async function loadData() {
+    loadBtn.disabled = true;
+    showLoading('正在从服务端拉取轨迹数据...', '50000 辆车 / 约 50 万轨迹点');
+
+    const tStart = performance.now();
+
+    try {
+      const resp = await fetch('/api/trajectories');
+      const tAfterFetch = performance.now();
+
+      showLoading('正在解析数据...', '大数据量 JSON 解析');
+      const data = await resp.json();
+      const tAfterParse = performance.now();
+
+      trajectoryData = data;
+
+      document.getElementById('vehicleCount').textContent = data.vehicleCount.toLocaleString();
+      document.getElementById('pointCount').textContent = data.totalPoints.toLocaleString();
+
+      const tTransmit = (tAfterFetch - tStart).toFixed(1);
+      const tParse = (tAfterParse - tAfterFetch).toFixed(1);
+      setPerf('perfTransmit', tTransmit, ' ms');
+      setPerf('perfParse', tParse, ' ms');
+
+      runAggregation();
+    } catch (err) {
+      console.error(err);
+      alert('数据加载失败: ' + err.message);
+    } finally {
+      loadBtn.disabled = false;
+      hideLoading();
+    }
+  }
+
+  function runAggregation() {
+    if (!trajectoryData) return;
+
+    showLoading('正在执行网格聚合...', '方格像素聚合器运行中');
+
+    const tAggStart = performance.now();
+    const aggResult = aggregatePoints(trajectoryData.points, trajectoryData.bound, currentGridSize);
+    const tAggEnd = performance.now();
+    const tAgg = (tAggEnd - tAggStart).toFixed(1);
+
+    const throughput = (trajectoryData.totalPoints / (tAgg / 1000)).toFixed(0);
+    setPerf('perfAggregate', tAgg, ' ms');
+    setPerf('perfThroughput', throughput, ' pts/s');
+
+    document.getElementById('gridResLabel').textContent = currentGridSize + ' × ' + currentGridSize;
+    document.getElementById('cellCount').textContent = aggResult.totalCells.toLocaleString();
+    document.getElementById('maxDensity').textContent = aggResult.maxCount.toLocaleString();
+    document.getElementById('nonEmptyCells').textContent = aggResult.nonEmpty.toLocaleString();
+
+    showLoading('正在渲染热力图...', 'Canvas 像素级绘制');
+
+    const tRenderStart = performance.now();
+    renderHeatmap(aggResult, currentColorBoost);
+    const tRenderEnd = performance.now();
+    const tRender = (tRenderEnd - tRenderStart).toFixed(1);
+    setPerf('perfRender', tRender, ' ms');
+
+    const total = (tRenderEnd - tAggStart + parseFloat(tAgg) + parseFloat(tRender)).toFixed(1);
+    setPerf('perfTotal', total, ' ms');
+
+    hideLoading();
+  }
+
+  gridSizeSlider.addEventListener('input', function () {
+    currentGridSize = parseInt(this.value);
+    gridSizeVal.textContent = currentGridSize + ' × ' + currentGridSize;
+  });
+  gridSizeSlider.addEventListener('change', function () {
+    if (trajectoryData) runAggregation();
+  });
+
+  colorBoostSlider.addEventListener('input', function () {
+    currentColorBoost = parseFloat(this.value);
+    colorBoostVal.textContent = currentColorBoost.toFixed(1) + 'x';
+  });
+  colorBoostSlider.addEventListener('change', function () {
+    if (trajectoryData) runAggregation();
+  });
+
+  loadBtn.addEventListener('click', loadData);
+
+  resizeCanvas();
+})();
+</script>
+</body>
+</html>

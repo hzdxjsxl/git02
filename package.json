@@ -1,0 +1,12 @@
+{
+  "name": "ev-site-heatmap",
+  "version": "1.0.0",
+  "description": "新能源选址数据大屏 - 车辆轨迹热力图",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
