@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>气象风暴轨迹可视化看板</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🌀 气象风暴轨迹可视化数据看板</h1>
+            <p class="subtitle">历年台风路径与风速分布分析</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="yearFilter">年份筛选:</label>
+                <select id="yearFilter">
+                    <option value="all">全部年份</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="intensityFilter">最小风速 (m/s):</label>
+                <input type="range" id="intensityFilter" min="0" max="85" value="0" step="5">
+                <span id="intensityValue">0</span>
+            </div>
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="showLabels"> 显示台风名称
+                </label>
+            </div>
+            <button id="refreshBtn" class="refresh-btn">🔄 刷新数据</button>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-card">
+                <span class="stat-label">台风总数</span>
+                <span class="stat-value" id="totalTyphoons">-</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">数据点数</span>
+                <span class="stat-value" id="totalPoints">-</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">最高风速</span>
+                <span class="stat-value" id="maxWind">-</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">显示数量</span>
+                <span class="stat-value" id="displayedCount">-</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="map-container">
+                <canvas id="mapCanvas"></canvas>
+                <div class="map-legend">
+                    <h4>风速色阶 (m/s)</h4>
+                    <div class="legend-gradient"></div>
+                    <div class="legend-labels">
+                        <span>10</span>
+                        <span>30</span>
+                        <span>50</span>
+                        <span>70</span>
+                        <span>85</span>
+                    </div>
+                </div>
+                <div class="loading-overlay" id="loadingOverlay">
+                    <div class="spinner"></div>
+                    <p>正在加载台风数据...</p>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <h3>📋 台风列表</h3>
+                <div class="typhoon-list" id="typhoonList">
+                    <p class="empty-message">加载中...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <script src="projection.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
