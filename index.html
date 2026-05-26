@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>农产品价格波动数据分析大盘</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 20px;
+    min-height: 100vh;
+}
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+.stats {
+    display: flex;
+    gap: 30px;
+    font-size: 13px;
+    color: #94a3b8;
+}
+.stat-value {
+    color: #60a5fa;
+    font-weight: 600;
+}
+.main-chart-container {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 15px;
+    border: 1px solid #334155;
+}
+.chart-wrapper {
+    position: relative;
+    height: 450px;
+}
+#mainChart {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.legend {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 15px;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+.legend-color {
+    width: 16px;
+    height: 3px;
+    border-radius: 2px;
+}
+.soybean-color { background: #60a5fa; }
+.corn-color { background: #f59e0b; }
+.tooltip {
+    position: absolute;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid #475569;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 100;
+    display: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.tooltip-date {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #e2e8f0;
+}
+.tooltip-price {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    margin: 2px 0;
+}
+.tooltip-label.soybean { color: #60a5fa; }
+.tooltip-label.corn { color: #f59e0b; }
+.range-container {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #334155;
+}
+.range-title {
+    font-size: 14px;
+    color: #94a3b8;
+    margin-bottom: 12px;
+}
+.range-wrapper {
+    position: relative;
+    height: 100px;
+}
+#rangeChart {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.range-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #334155;
+}
+.date-display {
+    font-size: 13px;
+    color: #cbd5e1;
+}
+.date-display span {
+    color: #60a5fa;
+    font-weight: 600;
+}
+.presets {
+    display: flex;
+    gap: 8px;
+}
+.preset-btn {
+    background: #334155;
+    color: #e2e8f0;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+.preset-btn:hover {
+    background: #475569;
+}
+.preset-btn.active {
+    background: #3b82f6;
+}
+.perf-stats {
+    font-size: 11px;
+    color: #64748b;
+}
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 400px;
+    font-size: 18px;
+    color: #64748b;
+}
+.loading-spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid #334155;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 12px;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div class="title">🌾 农产品价格波动数据分析大盘</div>
+        <div class="stats">
+            <div>数据总量: <span class="stat-value" id="totalPoints">0</span> 条</div>
+            <div>时间跨度: <span class="stat-value" id="dateRange">-</span></div>
+            <div>FPS: <span class="stat-value" id="fps">0</span></div>
+        </div>
+    </div>
+
+    <div class="main-chart-container">
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color soybean-color"></div>
+                <span>大豆 (元/吨)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color corn-color"></div>
+                <span>玉米 (元/吨)</span>
+            </div>
+        </div>
+        <div class="chart-wrapper">
+            <canvas id="mainChart"></canvas>
+            <div class="tooltip" id="tooltip"></div>
+        </div>
+    </div>
+
+    <div class="range-container">
+        <div class="range-title">时间轴控制 (拖拽选择范围)</div>
+        <div class="range-wrapper">
+            <canvas id="rangeChart"></canvas>
+        </div>
+        <div class="range-controls">
+            <div class="date-display">
+                选中范围: <span id="startDate">-</span> 至 <span id="endDate">-</span>
+                (<span id="selectedCount">0</span> 天)
+            </div>
+            <div class="presets">
+                <button class="preset-btn" data-range="1M">1月</button>
+                <button class="preset-btn" data-range="3M">3月</button>
+                <button class="preset-btn" data-range="6M">6月</button>
+                <button class="preset-btn active" data-range="1Y">1年</button>
+                <button class="preset-btn" data-range="3Y">3年</button>
+                <button class="preset-btn" data-range="ALL">全部</button>
+            </div>
+            <div class="perf-stats" id="perfStats">切片耗时: 0ms</div>
+        </div>
+    </div>
+</div>
+
+<script>
+class HighPerformanceSlicer {
+    constructor(dates, soybeanPrices, cornPrices) {
+        this.length = dates.length;
+        this.dates = dates;
+        this.soybeanPrices = new Float64Array(soybeanPrices);
+        this.cornPrices = new Float64Array(cornPrices);
+        this.dateIndex = new Int32Array(this.length);
+        for (let i = 0; i < this.length; i++) {
+            this.dateIndex[i] = i;
+        }
+        this.dateTimestamps = new Float64Array(this.length);
+        for (let i = 0; i < this.length; i++) {
+            this.dateTimestamps[i] = new Date(dates[i]).getTime();
+        }
+    }
+
+    binarySearch(timestamp) {
+        let low = 0;
+        let high = this.length - 1;
+        while (low <= high) {
+            const mid = (low + high) >> 1;
+            const midTime = this.dateTimestamps[mid];
+            if (midTime === timestamp) return mid;
+            if (midTime < timestamp) low = mid + 1;
+            else high = mid - 1;
+        }
+        return low;
+    }
+
+    sliceByDate(startDate, endDate) {
+        const startTime = new Date(startDate).getTime();
+        const endTime = new Date(endDate).getTime();
+        
+        const startIdx = this.binarySearch(startTime);
+        const endIdx = Math.min(this.binarySearch(endTime), this.length - 1);
+        
+        if (startIdx >= this.length || endIdx < 0 || startIdx > endIdx) {
+            return {
+                dates: [],
+                soybean: new Float64Array(0),
+                corn: new Float64Array(0),
+                startIndex: 0,
+                endIndex: 0
+            };
+        }
+        
+        const count = endIdx - startIdx + 1;
+        
+        return {
+            dates: this.dates.slice(startIdx, endIdx + 1),
+            soybean: this.soybeanPrices.subarray(startIdx, endIdx + 1),
+            corn: this.cornPrices.subarray(startIdx, endIdx + 1),
+            startIndex: startIdx,
+            endIndex: endIdx
+        };
+    }
+
+    sliceByIndex(startIdx, endIdx) {
+        startIdx = Math.max(0, Math.min(this.length - 1, startIdx));
+        endIdx = Math.max(0, Math.min(this.length - 1, endIdx));
+        if (startIdx > endIdx) [startIdx, endIdx] = [endIdx, startIdx];
+        
+        const count = endIdx - startIdx + 1;
+        
+        return {
+            dates: this.dates.slice(startIdx, endIdx + 1),
+            soybean: this.soybeanPrices.subarray(startIdx, endIdx + 1),
+            corn: this.cornPrices.subarray(startIdx, endIdx + 1),
+            startIndex: startIdx,
+            endIndex: endIdx
+        };
+    }
+
+    sliceByRatio(startRatio, endRatio) {
+        const startIdx = Math.floor(startRatio * (this.length - 1));
+        const endIdx = Math.floor(endRatio * (this.length - 1));
+        return this.sliceByIndex(startIdx, endIdx);
+    }
+}
+
+class LineChartRenderer {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.dpr = window.devicePixelRatio || 1;
+        this.padding = { top: 20, right: 60, bottom: 40, left: 60 };
+        this.data = null;
+        this.hoverIndex = -1;
+        this.resize();
+    }
+
+    resize() {
+        const rect = this.canvas.getBoundingClientRect();
+        this.width = rect.width;
+        this.height = rect.height;
+        this.canvas.width = rect.width * this.dpr;
+        this.canvas.height = rect.height * this.dpr;
+        this.ctx.scale(this.dpr, this.dpr);
+        this.chartWidth = this.width - this.padding.left - this.padding.right;
+        this.chartHeight = this.height - this.padding.top - this.padding.bottom;
+    }
+
+    setData(data) {
+        this.data = data;
+    }
+
+    getYRange() {
+        if (!this.data || this.data.soybean.length === 0) {
+            return { min: 0, max: 100 };
+        }
+        let min = Infinity;
+        let max = -Infinity;
+        const { soybean, corn } = this.data;
+        for (let i = 0; i < soybean.length; i++) {
+            if (soybean[i] < min) min = soybean[i];
+            if (soybean[i] > max) max = soybean[i];
+            if (corn[i] < min) min = corn[i];
+            if (corn[i] > max) max = corn[i];
+        }
+        const padding = (max - min) * 0.1;
+        return { min: Math.floor(min - padding), max: Math.ceil(max + padding) };
+    }
+
+    drawGrid(yRange) {
+        const ctx = this.ctx;
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 0.5;
+        
+        const ySteps = 6;
+        for (let i = 0; i <= ySteps; i++) {
+            const y = this.padding.top + (this.chartHeight / ySteps) * i;
+            ctx.beginPath();
+            ctx.moveTo(this.padding.left, y);
+            ctx.lineTo(this.width - this.padding.right, y);
+            ctx.stroke();
+            
+            const value = yRange.max - ((yRange.max - yRange.min) / ySteps) * i;
+            ctx.fillStyle = '#64748b';
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(value.toFixed(0), this.padding.left - 8, y + 4);
+        }
+        
+        const xSteps = 8;
+        if (this.data && this.data.dates.length > 0) {
+            ctx.textAlign = 'center';
+            for (let i = 0; i <= xSteps; i++) {
+                const x = this.padding.left + (this.chartWidth / xSteps) * i;
+                const idx = Math.floor((this.data.dates.length - 1) * (i / xSteps));
+                if (this.data.dates[idx]) {
+                    ctx.fillText(this.data.dates[idx], x, this.height - this.padding.bottom + 18);
+                }
+            }
+        }
+    }
+
+    drawLine(prices, color) {
+        if (!prices || prices.length === 0) return;
+        
+        const ctx = this.ctx;
+        const yRange = this.getYRange();
+        const pointCount = prices.length;
+        
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        
+        const xStep = this.chartWidth / Math.max(1, pointCount - 1);
+        const yScale = this.chartHeight / (yRange.max - yRange.min);
+        
+        let first = true;
+        for (let i = 0; i < pointCount; i++) {
+            const x = this.padding.left + i * xStep;
+            const y = this.padding.top + (yRange.max - prices[i]) * yScale;
+            
+            if (first) {
+                ctx.moveTo(x, y);
+                first = false;
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+    }
+
+    drawHoverIndicator() {
+        if (this.hoverIndex < 0 || !this.data || this.data.dates.length === 0) return;
+        
+        const ctx = this.ctx;
+        const yRange = this.getYRange();
+        const xStep = this.chartWidth / Math.max(1, this.data.dates.length - 1);
+        const yScale = this.chartHeight / (yRange.max - yRange.min);
+        
+        const x = this.padding.left + this.hoverIndex * xStep;
+        
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, this.padding.top);
+        ctx.lineTo(x, this.height - this.padding.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        const soybeanY = this.padding.top + (yRange.max - this.data.soybean[this.hoverIndex]) * yScale;
+        const cornY = this.padding.top + (yRange.max - this.data.corn[this.hoverIndex]) * yScale;
+        
+        ctx.fillStyle = '#60a5fa';
+        ctx.beginPath();
+        ctx.arc(x, soybeanY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(x, cornY, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    render() {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.width, this.height);
+        
+        if (!this.data || this.data.dates.length === 0) {
+            ctx.fillStyle = '#64748b';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无数据', this.width / 2, this.height / 2);
+            return;
+        }
+        
+        const yRange = this.getYRange();
+        this.drawGrid(yRange);
+        
+        this.drawLine(this.data.soybean, '#60a5fa');
+        this.drawLine(this.data.corn, '#f59e0b');
+        
+        this.drawHoverIndicator();
+    }
+
+    getIndexAtX(x) {
+        if (!this.data || this.data.dates.length === 0) return -1;
+        const chartX = x - this.padding.left;
+        if (chartX < 0 || chartX > this.chartWidth) return -1;
+        const ratio = chartX / this.chartWidth;
+        return Math.round(ratio * (this.data.dates.length - 1));
+    }
+}
+
+class RangeSelector {
+    constructor(canvas, slicer, onChange) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.dpr = window.devicePixelRatio || 1;
+        this.slicer = slicer;
+        this.onChange = onChange;
+        this.startRatio = 0;
+        this.endRatio = 1;
+        this.dragging = null;
+        this.resize();
+        this.setupEvents();
+    }
+
+    resize() {
+        const rect = this.canvas.getBoundingClientRect();
+        this.width = rect.width;
+        this.height = rect.height;
+        this.canvas.width = rect.width * this.dpr;
+        this.canvas.height = rect.height * this.dpr;
+        this.ctx.scale(this.dpr, this.dpr);
+    }
+
+    setupEvents() {
+        let isDragging = false;
+        let dragType = null;
+        let startX = 0;
+        let initialStart = 0;
+        let initialEnd = 0;
+
+        const getPos = (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            return (e.clientX - rect.left) / this.width;
+        };
+
+        this.canvas.addEventListener('mousedown', (e) => {
+            const pos = getPos(e);
+            const startX = this.startRatio * this.width;
+            const endX = this.endRatio * this.width;
+            const clickX = pos * this.width;
+            
+            if (Math.abs(clickX - startX) < 10) {
+                dragType = 'start';
+            } else if (Math.abs(clickX - endX) < 10) {
+                dragType = 'end';
+            } else if (clickX > startX && clickX < endX) {
+                dragType = 'move';
+                initialStart = this.startRatio;
+                initialEnd = this.endRatio;
+                startX = pos;
+            } else {
+                this.startRatio = Math.max(0, pos - 0.1);
+                this.endRatio = Math.min(1, pos + 0.1);
+                dragType = 'end';
+            }
+            isDragging = true;
+            this.render();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const pos = getPos(e);
+            
+            if (dragType === 'start') {
+                this.startRatio = Math.max(0, Math.min(this.endRatio - 0.02, pos));
+            } else if (dragType === 'end') {
+                this.endRatio = Math.min(1, Math.max(this.startRatio + 0.02, pos));
+            } else if (dragType === 'move') {
+                const delta = pos - startX;
+                const range = this.endRatio - this.startRatio;
+                let newStart = initialStart + delta;
+                let newEnd = initialEnd + delta;
+                if (newStart < 0) {
+                    newStart = 0;
+                    newEnd = range;
+                }
+                if (newEnd > 1) {
+                    newEnd = 1;
+                    newStart = 1 - range;
+                }
+                this.startRatio = newStart;
+                this.endRatio = newEnd;
+            }
+            
+            this.render();
+            this.onChange(this.startRatio, this.endRatio);
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+            dragType = null;
+        });
+    }
+
+    setRange(startRatio, endRatio) {
+        this.startRatio = Math.max(0, startRatio);
+        this.endRatio = Math.min(1, endRatio);
+        this.render();
+    }
+
+    render() {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.width, this.height);
+        
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, this.width, this.height);
+        
+        const fullData = this.slicer.sliceByRatio(0, 1);
+        if (fullData.soybean.length > 0) {
+            let min = Infinity, max = -Infinity;
+            for (let i = 0; i < fullData.soybean.length; i++) {
+                if (fullData.soybean[i] < min) min = fullData.soybean[i];
+                if (fullData.soybean[i] > max) max = fullData.soybean[i];
+                if (fullData.corn[i] < min) min = fullData.corn[i];
+                if (fullData.corn[i] > max) max = fullData.corn[i];
+            }
+            
+            const range = max - min || 1;
+            const yScale = (this.height - 20) / range;
+            const xStep = this.width / (fullData.soybean.length - 1);
+            
+            ctx.strokeStyle = 'rgba(96, 165, 250, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i < fullData.soybean.length; i++) {
+                const x = i * xStep;
+                const y = this.height - 10 - (fullData.soybean[i] - min) * yScale;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            
+            ctx.strokeStyle = 'rgba(245, 158, 11, 0.3)';
+            ctx.beginPath();
+            for (let i = 0; i < fullData.corn.length; i++) {
+                const x = i * xStep;
+                const y = this.height - 10 - (fullData.corn[i] - min) * yScale;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+        
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.7)';
+        ctx.fillRect(0, 0, this.startRatio * this.width, this.height);
+        ctx.fillRect(this.endRatio * this.width, 0, this.width, this.height);
+        
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
+            this.startRatio * this.width,
+            0,
+            (this.endRatio - this.startRatio) * this.width,
+            this.height
+        );
+        
+        ctx.fillStyle = '#3b82f6';
+        ctx.fillRect(this.startRatio * this.width - 4, 0, 4, this.height);
+        ctx.fillRect(this.endRatio * this.width, 0, 4, this.height);
+    }
+}
+
+class Application {
+    constructor() {
+        this.slicer = null;
+        this.mainChart = null;
+        this.rangeSelector = null;
+        this.frameCount = 0;
+        this.lastFpsTime = performance.now();
+        this.init();
+    }
+
+    async init() {
+        this.showLoading(true);
+        try {
+            const response = await fetch('/api/prices');
+            const data = await response.json();
+            this.loadData(data);
+        } catch (e) {
+            console.error('Failed to load data:', e);
+            this.generateMockData();
+        }
+        this.showLoading(false);
+        this.startFpsCounter();
+    }
+
+    generateMockData() {
+        const dates = [];
+        const soybean = [];
+        const corn = [];
+        const start = new Date(2015, 0, 1);
+        const end = new Date(2025, 11, 31);
+        let soyPrice = 3500;
+        let cornPrice = 2000;
+        
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            dates.push(d.toISOString().split('T')[0]);
+            soyPrice = Math.max(2800, Math.min(4800, soyPrice + (Math.random() - 0.5) * 60));
+            cornPrice = Math.max(1600, Math.min(2800, cornPrice + (Math.random() - 0.5) * 30));
+            soybean.push(Math.round(soyPrice * 100) / 100);
+            corn.push(Math.round(cornPrice * 100) / 100);
+        }
+        this.loadData({ dates, soybean, corn });
+    }
+
+    loadData(data) {
+        this.slicer = new HighPerformanceSlicer(data.dates, data.soybean, data.corn);
+        
+        document.getElementById('totalPoints').textContent = data.dates.length.toLocaleString();
+        document.getElementById('dateRange').textContent = 
+            data.dates[0] + ' ~ ' + data.dates[data.dates.length - 1];
+        
+        const mainCanvas = document.getElementById('mainChart');
+        this.mainChart = new LineChartRenderer(mainCanvas);
+        
+        this.rangeSelector = new RangeSelector(
+            document.getElementById('rangeChart'),
+            this.slicer,
+            (start, end) => this.onRangeChange(start, end)
+        );
+        
+        this.setupMainChartEvents();
+        this.setupPresetButtons();
+        this.setRangeByPreset('1Y');
+    }
+
+    setupMainChartEvents() {
+        const tooltip = document.getElementById('tooltip');
+        const canvas = document.getElementById('mainChart');
+        
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const idx = this.mainChart.getIndexAtX(x);
+            
+            if (idx >= 0 && this.mainChart.data) {
+                this.mainChart.hoverIndex = idx;
+                this.mainChart.render();
+                
+                const date = this.mainChart.data.dates[idx];
+                const soybeanPrice = this.mainChart.data.soybean[idx];
+                const cornPrice = this.mainChart.data.corn[idx];
+                
+                tooltip.innerHTML = `
+                    <div class="tooltip-date">${date}</div>
+                    <div class="tooltip-price">
+                        <span class="tooltip-label soybean">大豆:</span>
+                        <span>${soybeanPrice.toFixed(2)} 元/吨</span>
+                    </div>
+                    <div class="tooltip-price">
+                        <span class="tooltip-label corn">玉米:</span>
+                        <span>${cornPrice.toFixed(2)} 元/吨</span>
+                    </div>
+                `;
+                
+                tooltip.style.display = 'block';
+                tooltip.style.left = (x + 15) + 'px';
+                tooltip.style.top = '20px';
+            } else {
+                tooltip.style.display = 'none';
+            }
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            this.mainChart.hoverIndex = -1;
+            this.mainChart.render();
+            tooltip.style.display = 'none';
+        });
+    }
+
+    setupPresetButtons() {
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.setRangeByPreset(btn.dataset.range);
+            });
+        });
+    }
+
+    setRangeByPreset(preset) {
+        const totalDays = this.slicer.length;
+        let startRatio, endRatio = 1;
+        
+        switch (preset) {
+            case '1M': startRatio = 1 - 30 / totalDays; break;
+            case '3M': startRatio = 1 - 90 / totalDays; break;
+            case '6M': startRatio = 1 - 180 / totalDays; break;
+            case '1Y': startRatio = 1 - 365 / totalDays; break;
+            case '3Y': startRatio = 1 - 1095 / totalDays; break;
+            case 'ALL': startRatio = 0; break;
+            default: startRatio = 1 - 365 / totalDays;
+        }
+        
+        startRatio = Math.max(0, startRatio);
+        this.rangeSelector.setRange(startRatio, endRatio);
+        this.onRangeChange(startRatio, endRatio);
+    }
+
+    onRangeChange(startRatio, endRatio) {
+        const t0 = performance.now();
+        const sliced = this.slicer.sliceByRatio(startRatio, endRatio);
+        const sliceTime = performance.now() - t0;
+        
+        this.mainChart.setData(sliced);
+        this.mainChart.render();
+        
+        document.getElementById('startDate').textContent = 
+            sliced.dates[0] || '-';
+        document.getElementById('endDate').textContent = 
+            sliced.dates[sliced.dates.length - 1] || '-';
+        document.getElementById('selectedCount').textContent = 
+            sliced.dates.length.toLocaleString();
+        document.getElementById('perfStats').textContent = 
+            `切片耗时: ${sliceTime.toFixed(2)}ms | 数据点: ${sliced.dates.length}`;
+    }
+
+    showLoading(show) {
+        let loading = document.querySelector('.loading');
+        if (show && !loading) {
+            loading = document.createElement('div');
+            loading.className = 'loading';
+            loading.innerHTML = '<div class="loading-spinner"></div>正在加载数据...';
+            document.querySelector('.chart-wrapper').appendChild(loading);
+        } else if (!show && loading) {
+            loading.remove();
+        }
+    }
+
+    startFpsCounter() {
+        const updateFps = () => {
+            this.frameCount++;
+            const now = performance.now();
+            if (now - this.lastFpsTime >= 1000) {
+                document.getElementById('fps').textContent = this.frameCount;
+                this.frameCount = 0;
+                this.lastFpsTime = now;
+            }
+            requestAnimationFrame(updateFps);
+        };
+        requestAnimationFrame(updateFps);
+    }
+}
+
+window.addEventListener('resize', () => {
+    if (window.app && window.app.mainChart && window.app.rangeSelector) {
+        window.app.mainChart.resize();
+        window.app.mainChart.render();
+        window.app.rangeSelector.resize();
+        window.app.rangeSelector.render();
+    }
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+    window.app = new Application();
+});
+</script>
+</body>
+</html>
