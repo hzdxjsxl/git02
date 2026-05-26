@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>机房温控三维透视大盘</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #0a0a12; font-family: 'Segoe UI', sans-serif; }
+  #canvas { display: block; width: 100vw; height: 100vh; }
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; padding: 12px 20px;
+    background: linear-gradient(180deg, rgba(10,12,20,0.85) 0%, transparent 100%);
+    color: #7ec8e3; z-index: 10; display: flex; justify-content: space-between;
+    pointer-events: none;
+  }
+  #hud .title { font-size: 18px; font-weight: 600; letter-spacing: 2px; }
+  #hud .stats { display: flex; gap: 24px; font-size: 13px; }
+  #hud .stat-item { display: flex; flex-direction: column; align-items: flex-end; }
+  #hud .stat-label { color: #5a7a8e; font-size: 11px; }
+  #hud .stat-val { font-size: 16px; font-weight: 700; color: #7ec8e3; }
+  #hud .stat-val.hot { color: #ff4d4d; }
+  #legend {
+    position: fixed; bottom: 20px; left: 20px; background: rgba(10,12,20,0.75);
+    padding: 12px 16px; border-radius: 6px; border: 1px solid #1e3a4a;
+    color: #7ec8e3; font-size: 12px; z-index: 10;
+  }
+  #legend .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  #legend .swatch { width: 24px; height: 10px; border-radius: 2px; }
+  #tooltip {
+    position: fixed; pointer-events: none; background: rgba(10,12,20,0.95);
+    padding: 10px 14px; border-radius: 6px; border: 1px solid #2a4a5e;
+    color: #7ec8e3; font-size: 13px; z-index: 20; display: none;
+    max-width: 260px;
+  }
+  #tooltip .rack-id { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  #tooltip .temp-row { display: flex; justify-content: space-between; gap: 16px; }
+  #tooltip .temp-val { font-weight: 700; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud">
+  <div class="title">⚡ 机房温控三维透视大盘</div>
+  <div class="stats">
+    <div class="stat-item">
+      <span class="stat-label">机柜总数</span>
+      <span class="stat-val" id="rackCount">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">传感器数</span>
+      <span class="stat-val" id="sensorCount">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">平均温度</span>
+      <span class="stat-val" id="avgTemp">--</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">最高温度</span>
+      <span class="stat-val hot" id="maxTemp">--</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">告警机柜</span>
+      <span class="stat-val hot" id="alertCount">0</span>
+    </div>
+  </div>
+</div>
+<div id="legend">
+  <div class="row"><div class="swatch" style="background:rgba(30,70,200,0.25);"></div>冷 (≤25°C)</div>
+  <div class="row"><div class="swatch" style="background:rgba(100,140,220,0.55);"></div>温 (25-45°C)</div>
+  <div class="row"><div class="swatch" style="background:rgba(220,90,60,0.85);"></div>热 (45-65°C)</div>
+  <div class="row"><div class="swatch" style="background:rgba(255,30,30,1);"></div>告警 (>65°C)</div>
+</div>
+<div id="tooltip"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x0a0a12);
+renderer.autoClear = false;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0a0a12, 40, 120);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+camera.position.set(35, 30, 50);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 10;
+controls.maxDistance = 120;
+controls.maxPolarAngle = Math.PI * 0.48;
+controls.target.set(0, 2, 0);
+
+const ambientLight = new THREE.AmbientLight(0x334466, 0.6);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0x88aacc, 0.8);
+dirLight.position.set(20, 30, 10);
+scene.add(dirLight);
+
+const pointLight1 = new THREE.PointLight(0x3366ff, 0.4, 60);
+pointLight1.position.set(-15, 8, 15);
+scene.add(pointLight1);
+
+const pointLight2 = new THREE.PointLight(0xff3344, 0.3, 50);
+pointLight2.position.set(15, 5, -15);
+scene.add(pointLight2);
+
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshStandardMaterial({ color: 0x111825, roughness: 0.95, metalness: 0.05 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.01;
+scene.add(floor);
+
+const gridHelper = new THREE.GridHelper(200, 60, 0x1a3355, 0x142038);
+gridHelper.position.y = 0;
+scene.add(gridHelper);
+
+const rackVertexShader = `
+  varying vec3 vNormal;
+  varying vec3 vViewPos;
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    vNormal = normalize(normalMatrix * normal);
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewPos = mvPos.xyz;
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+const rackFragmentShader = `
+  uniform float uTemp;
+  uniform float uTime;
+  uniform float uIsHover;
+  varying vec3 vNormal;
+  varying vec3 vViewPos;
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+
+  void main() {
+    float t = clamp(uTemp, 0.0, 1.0);
+
+    vec3 coldCol = vec3(0.12, 0.28, 0.85);
+    vec3 warmCol = vec3(0.55, 0.55, 0.90);
+    vec3 hotCol  = vec3(1.0, 0.18, 0.10);
+
+    vec3 color;
+    if (t < 0.5) {
+      color = mix(coldCol, warmCol, t * 2.0);
+    } else {
+      color = mix(warmCol, hotCol, (t - 0.5) * 2.0);
+    }
+
+    float coldAlpha = 0.22;
+    float warmAlpha = 0.55;
+    float hotAlpha  = 1.0;
+    float alpha;
+    if (t < 0.5) {
+      alpha = mix(coldAlpha, warmAlpha, t * 2.0);
+    } else {
+      alpha = mix(warmAlpha, hotAlpha, (t - 0.5) * 2.0);
+    }
+
+    vec3 viewDir = normalize(-vViewPos);
+    float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 2.5);
+    color += fresnel * 0.35 * mix(vec3(0.2, 0.5, 1.0), vec3(1.0, 0.3, 0.2), t);
+    alpha = min(1.0, alpha + fresnel * 0.25);
+
+    float stripe = step(0.92, fract(vUv.y * 42.0));
+    color *= (1.0 - stripe * 0.35);
+    alpha *= (1.0 - stripe * 0.2);
+
+    float led = step(0.97, fract(vUv.x * 80.0)) * step(0.93, fract(vUv.y * 20.0));
+    color += led * mix(vec3(0.0, 1.0, 0.3), vec3(1.0, 0.1, 0.0), smoothstep(0.4, 0.8, t));
+    alpha = max(alpha, led * 0.9);
+
+    float pulse = sin(uTime * 3.0 + vWorldPos.y * 5.0) * 0.5 + 0.5;
+    color += (pulse * 0.06) * mix(vec3(0.0, 0.3, 0.8), vec3(1.0, 0.1, 0.1), t);
+
+    color += uIsHover * vec3(0.2, 0.35, 0.5);
+    alpha += uIsHover * 0.25;
+
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+const cableVertexShader = `
+  varying vec3 vLineDir;
+  varying vec3 vViewDir;
+  varying float vAlphaBase;
+  attribute float aAlpha;
+  void main() {
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewDir = normalize(-mvPos.xyz);
+    vAlphaBase = aAlpha;
+    vec3 worldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+    vLineDir = normalize(position - vec3(0.0));
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+const cableFragmentShader = `
+  uniform float uTime;
+  varying vec3 vLineDir;
+  varying vec3 vViewDir;
+  varying float vAlphaBase;
+  void main() {
+    float viewFactor = abs(dot(vLineDir, vViewDir));
+    float edgeFade = pow(1.0 - viewFactor, 1.8);
+    float alpha = vAlphaBase * edgeFade;
+    vec3 color = mix(vec3(0.25, 0.55, 1.0), vec3(0.1, 0.8, 1.0), 0.5);
+    float flick = 0.85 + 0.15 * sin(uTime * 6.0 + gl_FragCoord.x * 0.1);
+    gl_FragColor = vec4(color * flick, alpha);
+  }
+`;
+
+const rackMaterialCache = new Map();
+
+function createRackMaterial(initialTemp) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTemp: { value: initialTemp },
+      uTime: { value: 0 },
+      uIsHover: { value: 0 }
+    },
+    vertexShader: rackVertexShader,
+    fragmentShader: rackFragmentShader,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: true
+  });
+  return mat;
+}
+
+const RACK_W = 1.2;
+const RACK_H = 4.0;
+const RACK_D = 1.8;
+const RACK_GAP = 0.4;
+
+const rackMeshes = [];
+const rackGroup = new THREE.Group();
+scene.add(rackGroup);
+
+let config = null;
+let temperatureData = null;
+
+function buildRacks() {
+  while (rackGroup.children.length > 0) {
+    const c = rackGroup.children[0];
+    rackGroup.remove(c);
+    c.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+  }
+  rackMeshes.length = 0;
+
+  const rows = config.rackRows;
+  const cols = config.rackCols;
+  const totalWidth = cols * (RACK_W + RACK_GAP) - RACK_GAP;
+  const totalDepth = rows * (RACK_D + RACK_GAP * 3) - RACK_GAP * 3;
+
+  const offsetX = -totalWidth / 2 + RACK_W / 2;
+  const offsetZ = -totalDepth / 2 + RACK_D / 2;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      const x = offsetX + c * (RACK_W + RACK_GAP);
+      const z = offsetZ + r * (RACK_D + RACK_GAP * 3);
+
+      const rack = new THREE.Group();
+      rack.position.set(x, 0, z);
+      rack.userData.rackIndex = idx;
+      rack.userData.rackId = `R-${String(r + 1).padStart(2, '0')}-${String(c + 1).padStart(2, '0')}`;
+
+      const frameGeom = new THREE.BoxGeometry(RACK_W * 1.02, RACK_H * 1.02, RACK_D * 1.02);
+      const frameMat = new THREE.MeshBasicMaterial({
+        color: 0x0a1520, wireframe: true, transparent: true, opacity: 0.15
+      });
+      const frame = new THREE.Mesh(frameGeom, frameMat);
+      frame.position.y = RACK_H / 2;
+      rack.add(frame);
+
+      const bodyGeom = new THREE.BoxGeometry(RACK_W, RACK_H, RACK_D);
+      const bodyMat = createRackMaterial(0.0);
+      const body = new THREE.Mesh(bodyGeom, bodyMat);
+      body.position.y = RACK_H / 2;
+      body.userData.isRackBody = true;
+      body.userData.rackIndex = idx;
+      rack.add(body);
+
+      const cableGroup = createCablesForRack();
+      cableGroup.position.y = RACK_H / 2;
+      rack.add(cableGroup);
+
+      rackGroup.add(rack);
+      rackMeshes.push({ group: rack, body, material: bodyMat, cables: cableGroup });
+    }
+  }
+
+  const labels = {
+    rackCount: rows * cols,
+    sensorCount: config.totalSensors
+  };
+  document.getElementById('rackCount').textContent = labels.rackCount;
+  document.getElementById('sensorCount').textContent = labels.sensorCount;
+}
+
+function createCablesForRack() {
+  const group = new THREE.Group();
+  const numBundles = 8;
+  const numSegments = 18;
+
+  for (let b = 0; b < numBundles; b++) {
+    const startY = -RACK_H * 0.35 + (b / (numBundles - 1)) * RACK_H * 0.7;
+    const endY = startY + (Math.random() - 0.5) * RACK_H * 0.4;
+    const startX = -RACK_W * 0.35 + Math.random() * RACK_W * 0.7;
+    const endX = -RACK_W * 0.35 + Math.random() * RACK_W * 0.7;
+    const startZ = -RACK_D * 0.35 + Math.random() * RACK_D * 0.7;
+    const endZ = -RACK_D * 0.35 + Math.random() * RACK_D * 0.7;
+
+    const positions = [];
+    const alphas = [];
+
+    for (let s = 0; s < numSegments; s++) {
+      const t0 = s / numSegments;
+      const t1 = (s + 1) / numSegments;
+
+      const x0 = startX + (endX - startX) * t0 + (Math.random() - 0.5) * 0.12;
+      const y0 = startY + (endY - startY) * t0 + (Math.random() - 0.5) * 0.12;
+      const z0 = startZ + (endZ - startZ) * t0 + (Math.random() - 0.5) * 0.12;
+
+      const x1 = startX + (endX - startX) * t1 + (Math.random() - 0.5) * 0.12;
+      const y1 = startY + (endY - startY) * t1 + (Math.random() - 0.5) * 0.12;
+      const z1 = startZ + (endZ - startZ) * t1 + (Math.random() - 0.5) * 0.12;
+
+      positions.push(x0, y0, z0, x1, y1, z1);
+      const a = 0.35 + Math.random() * 0.35;
+      alphas.push(a, a);
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute('aAlpha', new THREE.Float32BufferAttribute(alphas, 1));
+    geom.computeBoundingSphere();
+
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: cableVertexShader,
+      fragmentShader: cableFragmentShader,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const lines = new THREE.LineSegments(geom, mat);
+    group.add(lines);
+  }
+
+  const dotPositions = [];
+  const dotAlphas = [];
+  for (let i = 0; i < 40; i++) {
+    const px = (Math.random() - 0.5) * RACK_W * 0.8;
+    const py = (Math.random() - 0.5) * RACK_H * 0.8;
+    const pz = (Math.random() - 0.5) * RACK_D * 0.8;
+    dotPositions.push(px, py, pz);
+    dotPositions.push(px + 0.01, py, pz);
+    const a = 0.5 + Math.random() * 0.5;
+    dotAlphas.push(a, a);
+  }
+  const dotGeom = new THREE.BufferGeometry();
+  dotGeom.setAttribute('position', new THREE.Float32BufferAttribute(dotPositions, 3));
+  dotGeom.setAttribute('aAlpha', new THREE.Float32BufferAttribute(dotAlphas, 1));
+  const dotMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: cableVertexShader,
+    fragmentShader: cableFragmentShader,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const dotLines = new THREE.LineSegments(dotGeom, dotMat);
+  group.add(dotLines);
+
+  return group;
+}
+
+function updateRackTemperatures() {
+  if (!temperatureData || !config) return;
+  const { rackRows, rackCols, sensorsPerRack } = config;
+  let globalSum = 0;
+  let globalMax = -Infinity;
+  let alertCount = 0;
+
+  for (let r = 0; r < rackRows; r++) {
+    for (let c = 0; c < rackCols; c++) {
+      const idx = r * rackCols + c;
+      const sensorBase = idx * sensorsPerRack;
+      let sum = 0;
+      let maxT = -Infinity;
+      for (let s = 0; s < sensorsPerRack; s++) {
+        const t = temperatureData[sensorBase + s];
+        sum += t;
+        if (t > maxT) maxT = t;
+      }
+      const avg = sum / sensorsPerRack;
+      globalSum += sum;
+      if (maxT > globalMax) globalMax = maxT;
+      if (maxT > 65) alertCount++;
+
+      const normalized = (avg - 15) / 70;
+      if (rackMeshes[idx]) {
+        rackMeshes[idx].material.uniforms.uTemp.value = normalized;
+        rackMeshes[idx].group.userData.avgTemp = avg;
+        rackMeshes[idx].group.userData.maxTemp = maxT;
+      }
+    }
+  }
+
+  const totalSensors = config.totalSensors;
+  document.getElementById('avgTemp').textContent = (globalSum / totalSensors).toFixed(1) + '°C';
+  document.getElementById('maxTemp').textContent = globalMax.toFixed(1) + '°C';
+  document.getElementById('alertCount').textContent = alertCount;
+}
+
+function updateShaderTime(t) {
+  for (const rm of rackMeshes) {
+    rm.material.uniforms.uTime.value = t;
+    rm.cables.traverse(obj => {
+      if (obj.material && obj.material.uniforms && obj.material.uniforms.uTime) {
+        obj.material.uniforms.uTime.value = t;
+      }
+    });
+  }
+}
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const tooltip = document.getElementById('tooltip');
+let hoveredRack = null;
+
+function onPointerMove(e) {
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const bodies = rackMeshes.map(rm => rm.body);
+  const hits = raycaster.intersectObjects(bodies, false);
+
+  if (hits.length > 0) {
+    const hit = hits[0];
+    const idx = hit.object.userData.rackIndex;
+    if (hoveredRack !== idx) {
+      if (hoveredRack !== null && rackMeshes[hoveredRack]) {
+        rackMeshes[hoveredRack].material.uniforms.uIsHover.value = 0;
+      }
+      hoveredRack = idx;
+      rackMeshes[idx].material.uniforms.uIsHover.value = 1;
+    }
+    const ud = rackMeshes[idx].group.userData;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top = (e.clientY + 14) + 'px';
+    tooltip.innerHTML = `
+      <div class="rack-id">${ud.rackId}</div>
+      <div class="temp-row"><span>平均温度</span><span class="temp-val">${ud.avgTemp ? ud.avgTemp.toFixed(1) + '°C' : '--'}</span></div>
+      <div class="temp-row"><span>最高温度</span><span class="temp-val" style="color:${ud.maxTemp > 65 ? '#ff4d4d' : '#7ec8e3'}">${ud.maxTemp ? ud.maxTemp.toFixed(1) + '°C' : '--'}</span></div>
+      <div class="temp-row"><span>传感器</span><span>${config.sensorsPerRack}</span></div>
+      <div class="temp-row"><span>状态</span><span style="color:${ud.maxTemp > 65 ? '#ff4d4d' : '#50e890'}">${ud.maxTemp > 65 ? '⚠ 告警' : '✓ 正常'}</span></div>
+    `;
+  } else {
+    if (hoveredRack !== null && rackMeshes[hoveredRack]) {
+      rackMeshes[hoveredRack].material.uniforms.uIsHover.value = 0;
+    }
+    hoveredRack = null;
+    tooltip.style.display = 'none';
+  }
+}
+canvas.addEventListener('pointermove', onPointerMove);
+
+const ws = new WebSocket(`ws://${location.host}`);
+ws.binaryType = 'arraybuffer';
+
+ws.onmessage = (event) => {
+  if (typeof event.data === 'string') {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'config') {
+      config = msg;
+      temperatureData = new Float32Array(config.totalSensors);
+      buildRacks();
+    }
+  } else {
+    temperatureData = new Float32Array(event.data);
+    updateRackTemperatures();
+  }
+};
+
+ws.onclose = () => console.log('WebSocket closed');
+ws.onerror = (e) => console.error('WebSocket error', e);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  controls.update();
+  updateShaderTime(t);
+
+  pointLight1.intensity = 0.35 + Math.sin(t * 2) * 0.15;
+  pointLight2.intensity = 0.25 + Math.sin(t * 1.7 + 1) * 0.12;
+
+  renderer.clear();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
