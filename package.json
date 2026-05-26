@@ -1,0 +1,12 @@
+{
+  "name": "video-churn-funnel",
+  "version": "1.0.0",
+  "description": "短视频流失数据分析看板",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
