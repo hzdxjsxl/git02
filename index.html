@@ -318,6 +318,11 @@ class LineChartRenderer {
         this.padding = { top: 20, right: 60, bottom: 40, left: 60 };
         this.data = null;
         this.hoverIndex = -1;
+        this._timestamps = null;
+        this._timeRange = null;
+        this._xScale = 0;
+        this._yRange = null;
+        this._yScale = 0;
         this.resize();
     }
 
@@ -334,11 +339,68 @@ class LineChartRenderer {
 
     setData(data) {
         this.data = data;
+        this._timestamps = null;
+        this._timeRange = null;
+        this._yRange = null;
+        this._cachedTicks = null;
+        this._ticksRangeKey = null;
+        this.hoverIndex = -1;
+        if (data && data.dates.length > 0) {
+            this._precomputeTimestamps();
+            this._computeYRange();
+        }
     }
 
-    getYRange() {
+    _precomputeTimestamps() {
+        if (this._timestamps) return;
+        const len = this.data.dates.length;
+        this._timestamps = new Float64Array(len);
+        for (let i = 0; i < len; i++) {
+            this._timestamps[i] = new Date(this.data.dates[i]).getTime();
+        }
+        this._timeRange = {
+            start: this._timestamps[0],
+            end: this._timestamps[len - 1]
+        };
+        this._xScale = this.chartWidth / (this._timeRange.end - this._timeRange.start);
+    }
+
+    getXFromTime(timestamp) {
+        return this.padding.left + (timestamp - this._timeRange.start) * this._xScale;
+    }
+
+    getXFromIndex(index) {
+        return this.getXFromTime(this._timestamps[index]);
+    }
+
+    getIndexAtX(x) {
+        if (!this.data || this.data.dates.length === 0) return -1;
+        const chartX = x - this.padding.left;
+        if (chartX < 0 || chartX > this.chartWidth) return -1;
+        this._precomputeTimestamps();
+        const targetTime = this._timeRange.start + chartX / this._xScale;
+        let low = 0, high = this._timestamps.length - 1;
+        while (low < high) {
+            const mid = (low + high + 1) >> 1;
+            if (this._timestamps[mid] <= targetTime) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        if (low < this._timestamps.length - 1) {
+            const dist1 = targetTime - this._timestamps[low];
+            const dist2 = this._timestamps[low + 1] - targetTime;
+            if (dist2 < dist1) low++;
+        }
+        return low;
+    }
+
+    _computeYRange() {
+        if (this._yRange) return this._yRange;
         if (!this.data || this.data.soybean.length === 0) {
-            return { min: 0, max: 100 };
+            this._yRange = { min: 0, max: 100 };
+            return this._yRange;
         }
         let min = Infinity;
         let max = -Infinity;
@@ -350,14 +412,86 @@ class LineChartRenderer {
             if (corn[i] > max) max = corn[i];
         }
         const padding = (max - min) * 0.1;
-        return { min: Math.floor(min - padding), max: Math.ceil(max + padding) };
+        this._yRange = { min: Math.floor(min - padding), max: Math.ceil(max + padding) };
+        this._yScale = this.chartHeight / (this._yRange.max - this._yRange.min);
+        return this._yRange;
     }
 
-    drawGrid(yRange) {
+    getYFromPrice(price) {
+        return this.padding.top + (this._yRange.max - price) * this._yScale;
+    }
+
+    _generateSmartTicks() {
+        const rangeKey = this._timeRange.start + '_' + this._timeRange.end;
+        if (this._cachedTicks && this._ticksRangeKey === rangeKey) {
+            return this._cachedTicks;
+        }
+        const rangeMs = this._timeRange.end - this._timeRange.start;
+        const rangeDays = rangeMs / 86400000;
+        let tickInterval, format;
+        if (rangeDays <= 60) {
+            tickInterval = 7;
+            format = (d) => d.toISOString().slice(5, 10);
+        } else if (rangeDays <= 180) {
+            tickInterval = 14;
+            format = (d) => d.toISOString().slice(5, 10);
+        } else if (rangeDays <= 365) {
+            tickInterval = 30;
+            format = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        } else if (rangeDays <= 730) {
+            tickInterval = 60;
+            format = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        } else if (rangeDays <= 1460) {
+            tickInterval = 90;
+            format = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        } else {
+            tickInterval = 365;
+            format = (d) => String(d.getFullYear());
+        }
+        const ticks = [];
+        let current = new Date(this._timeRange.start);
+        current.setHours(0, 0, 0, 0);
+        if (rangeDays <= 365) {
+            current.setDate(1);
+        } else if (rangeDays <= 1460) {
+            current.setDate(1);
+            const month = current.getMonth();
+            current.setMonth(Math.floor(month / 3) * 3);
+        } else {
+            current.setMonth(0, 1);
+        }
+        let currentTime = current.getTime();
+        while (currentTime <= this._timeRange.end) {
+            if (currentTime >= this._timeRange.start) {
+                ticks.push({
+                    time: currentTime,
+                    label: format(new Date(currentTime))
+                });
+            }
+            current = new Date(currentTime);
+            if (tickInterval === 365) {
+                current.setFullYear(current.getFullYear() + 1);
+            } else if (tickInterval === 90) {
+                current.setMonth(current.getMonth() + 3);
+            } else if (tickInterval === 60) {
+                current.setMonth(current.getMonth() + 2);
+            } else if (tickInterval === 30) {
+                current.setMonth(current.getMonth() + 1);
+            } else {
+                current.setDate(current.getDate() + tickInterval);
+            }
+            currentTime = current.getTime();
+        }
+        this._cachedTicks = ticks;
+        this._ticksRangeKey = rangeKey;
+        return ticks;
+    }
+
+    drawGrid() {
         const ctx = this.ctx;
+        const yRange = this._computeYRange();
         ctx.strokeStyle = '#334155';
         ctx.lineWidth = 0.5;
-        
         const ySteps = 6;
         for (let i = 0; i <= ySteps; i++) {
             const y = this.padding.top + (this.chartHeight / ySteps) * i;
@@ -365,46 +499,42 @@ class LineChartRenderer {
             ctx.moveTo(this.padding.left, y);
             ctx.lineTo(this.width - this.padding.right, y);
             ctx.stroke();
-            
             const value = yRange.max - ((yRange.max - yRange.min) / ySteps) * i;
             ctx.fillStyle = '#64748b';
             ctx.font = '11px sans-serif';
             ctx.textAlign = 'right';
             ctx.fillText(value.toFixed(0), this.padding.left - 8, y + 4);
         }
-        
-        const xSteps = 8;
-        if (this.data && this.data.dates.length > 0) {
-            ctx.textAlign = 'center';
-            for (let i = 0; i <= xSteps; i++) {
-                const x = this.padding.left + (this.chartWidth / xSteps) * i;
-                const idx = Math.floor((this.data.dates.length - 1) * (i / xSteps));
-                if (this.data.dates[idx]) {
-                    ctx.fillText(this.data.dates[idx], x, this.height - this.padding.bottom + 18);
-                }
+        this._precomputeTimestamps();
+        const ticks = this._generateSmartTicks();
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+        ctx.lineWidth = 0.5;
+        for (const tick of ticks) {
+            const x = this.getXFromTime(tick.time);
+            if (x >= this.padding.left && x <= this.width - this.padding.right) {
+                ctx.beginPath();
+                ctx.moveTo(x, this.padding.top);
+                ctx.lineTo(x, this.height - this.padding.bottom);
+                ctx.stroke();
+                ctx.fillText(tick.label, x, this.height - this.padding.bottom + 18);
             }
         }
     }
 
     drawLine(prices, color) {
         if (!prices || prices.length === 0) return;
-        
         const ctx = this.ctx;
-        const yRange = this.getYRange();
         const pointCount = prices.length;
-        
         ctx.beginPath();
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.5;
-        
-        const xStep = this.chartWidth / Math.max(1, pointCount - 1);
-        const yScale = this.chartHeight / (yRange.max - yRange.min);
-        
         let first = true;
         for (let i = 0; i < pointCount; i++) {
-            const x = this.padding.left + i * xStep;
-            const y = this.padding.top + (yRange.max - prices[i]) * yScale;
-            
+            const x = this.getXFromIndex(i);
+            const y = this.getYFromPrice(prices[i]);
             if (first) {
                 ctx.moveTo(x, y);
                 first = false;
@@ -417,14 +547,8 @@ class LineChartRenderer {
 
     drawHoverIndicator() {
         if (this.hoverIndex < 0 || !this.data || this.data.dates.length === 0) return;
-        
         const ctx = this.ctx;
-        const yRange = this.getYRange();
-        const xStep = this.chartWidth / Math.max(1, this.data.dates.length - 1);
-        const yScale = this.chartHeight / (yRange.max - yRange.min);
-        
-        const x = this.padding.left + this.hoverIndex * xStep;
-        
+        const x = this.getXFromIndex(this.hoverIndex);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
@@ -433,25 +557,27 @@ class LineChartRenderer {
         ctx.lineTo(x, this.height - this.padding.bottom);
         ctx.stroke();
         ctx.setLineDash([]);
-        
-        const soybeanY = this.padding.top + (yRange.max - this.data.soybean[this.hoverIndex]) * yScale;
-        const cornY = this.padding.top + (yRange.max - this.data.corn[this.hoverIndex]) * yScale;
-        
+        const soybeanY = this.getYFromPrice(this.data.soybean[this.hoverIndex]);
+        const cornY = this.getYFromPrice(this.data.corn[this.hoverIndex]);
         ctx.fillStyle = '#60a5fa';
         ctx.beginPath();
         ctx.arc(x, soybeanY, 4, 0, Math.PI * 2);
         ctx.fill();
-        
         ctx.fillStyle = '#f59e0b';
         ctx.beginPath();
         ctx.arc(x, cornY, 4, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    render() {
+    render(hoverOnly = false) {
         const ctx = this.ctx;
+        if (this.canvas.width === 0 || this.canvas.height === 0) return;
+        if (hoverOnly && this._lastRenderSnapshot) {
+            ctx.putImageData(this._lastRenderSnapshot, 0, 0);
+            this.drawHoverIndicator();
+            return;
+        }
         ctx.clearRect(0, 0, this.width, this.height);
-        
         if (!this.data || this.data.dates.length === 0) {
             ctx.fillStyle = '#64748b';
             ctx.font = '14px sans-serif';
@@ -459,22 +585,11 @@ class LineChartRenderer {
             ctx.fillText('暂无数据', this.width / 2, this.height / 2);
             return;
         }
-        
-        const yRange = this.getYRange();
-        this.drawGrid(yRange);
-        
+        this.drawGrid();
         this.drawLine(this.data.soybean, '#60a5fa');
         this.drawLine(this.data.corn, '#f59e0b');
-        
+        this._lastRenderSnapshot = ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
         this.drawHoverIndicator();
-    }
-
-    getIndexAtX(x) {
-        if (!this.data || this.data.dates.length === 0) return -1;
-        const chartX = x - this.padding.left;
-        if (chartX < 0 || chartX > this.chartWidth) return -1;
-        const ratio = chartX / this.chartWidth;
-        return Math.round(ratio * (this.data.dates.length - 1));
     }
 }
 
@@ -715,7 +830,7 @@ class Application {
             
             if (idx >= 0 && this.mainChart.data) {
                 this.mainChart.hoverIndex = idx;
-                this.mainChart.render();
+                this.mainChart.render(true);
                 
                 const date = this.mainChart.data.dates[idx];
                 const soybeanPrice = this.mainChart.data.soybean[idx];
@@ -743,7 +858,7 @@ class Application {
         
         canvas.addEventListener('mouseleave', () => {
             this.mainChart.hoverIndex = -1;
-            this.mainChart.render();
+            this.mainChart.render(true);
             tooltip.style.display = 'none';
         });
     }
