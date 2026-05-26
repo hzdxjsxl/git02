@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>宏观贸易流向数据看板</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>宏观贸易流向数据看板</h1>
+      <div class="controls">
+        <button id="refreshBtn">刷新数据</button>
+        <div class="legend">
+          <div class="legend-item">
+            <span class="legend-color" style="background: linear-gradient(90deg, #ff6b6b, #4ecdc4);"></span>
+            <span>出口方向</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-thick"></span>
+            <span>贸易额越大色带越粗</span>
+          </div>
+        </div>
+      </div>
+    </header>
+    
+    <main>
+      <div class="canvas-container">
+        <canvas id="tradeCanvas"></canvas>
+      </div>
+      <div class="info-panel">
+        <div id="countryInfo" class="country-info">
+          <h3>国家信息</h3>
+          <p class="hint">悬停在圆弧上查看详情</p>
+        </div>
+        <div id="tradeInfo" class="trade-info">
+          <h3>贸易详情</h3>
+          <p class="hint">悬停在色带上查看贸易数据</p>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="trade-chart.js"></script>
+</body>
+</html>

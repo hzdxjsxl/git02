@@ -1,0 +1,12 @@
+{
+  "name": "trade-flow-dashboard",
+  "version": "1.0.0",
+  "description": "宏观贸易流向数据看板",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
