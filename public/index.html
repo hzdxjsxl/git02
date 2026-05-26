@@ -65,7 +65,7 @@
   </div>
 </div>
 <div id="legend">
-  <div class="row"><div class="swatch" style="background:rgba(30,70,200,0.25);"></div>冷 (≤25°C)</div>
+  <div class="row"><div class="swatch" style="background:rgba(40,120,255,0.22);"></div>冷 (≤25°C)</div>
   <div class="row"><div class="swatch" style="background:rgba(100,140,220,0.55);"></div>温 (25-45°C)</div>
   <div class="row"><div class="swatch" style="background:rgba(220,90,60,0.85);"></div>热 (45-65°C)</div>
   <div class="row"><div class="swatch" style="background:rgba(255,30,30,1);"></div>告警 (>65°C)</div>
@@ -156,84 +156,175 @@ const rackFragmentShader = `
   varying vec3 vWorldPos;
   varying vec2 vUv;
 
+  vec3 smooth3Color(float t) {
+    vec3 iceBlue = vec3(0.18, 0.45, 1.0);
+    vec3 coolPurple = vec3(0.45, 0.55, 0.95);
+    vec3 warmOrange = vec3(0.95, 0.55, 0.35);
+    vec3 fireRed = vec3(1.0, 0.15, 0.08);
+    
+    float t0 = smoothstep(0.0, 0.33, t);
+    float t1 = smoothstep(0.33, 0.66, t);
+    float t2 = smoothstep(0.66, 1.0, t);
+    
+    vec3 c0 = mix(iceBlue, coolPurple, t0);
+    vec3 c1 = mix(c0, warmOrange, t1);
+    vec3 c2 = mix(c1, fireRed, t2);
+    return c2;
+  }
+
+  float smoothAlpha(float t) {
+    float iceAlpha = 0.18;
+    float warmAlpha = 0.55;
+    float fireAlpha = 1.0;
+    
+    float tMid = smoothstep(0.0, 0.5, t);
+    float tHigh = smoothstep(0.5, 1.0, t);
+    
+    float mid = mix(iceAlpha, warmAlpha, tMid);
+    return mix(mid, fireAlpha, tHigh);
+  }
+
   void main() {
     float t = clamp(uTemp, 0.0, 1.0);
 
-    vec3 coldCol = vec3(0.12, 0.28, 0.85);
-    vec3 warmCol = vec3(0.55, 0.55, 0.90);
-    vec3 hotCol  = vec3(1.0, 0.18, 0.10);
-
-    vec3 color;
-    if (t < 0.5) {
-      color = mix(coldCol, warmCol, t * 2.0);
-    } else {
-      color = mix(warmCol, hotCol, (t - 0.5) * 2.0);
-    }
-
-    float coldAlpha = 0.22;
-    float warmAlpha = 0.55;
-    float hotAlpha  = 1.0;
-    float alpha;
-    if (t < 0.5) {
-      alpha = mix(coldAlpha, warmAlpha, t * 2.0);
-    } else {
-      alpha = mix(warmAlpha, hotAlpha, (t - 0.5) * 2.0);
-    }
+    vec3 color = smooth3Color(t);
+    float alpha = smoothAlpha(t);
 
     vec3 viewDir = normalize(-vViewPos);
-    float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 2.5);
-    color += fresnel * 0.35 * mix(vec3(0.2, 0.5, 1.0), vec3(1.0, 0.3, 0.2), t);
-    alpha = min(1.0, alpha + fresnel * 0.25);
+    float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 2.2);
+    vec3 edgeColor = mix(vec3(0.3, 0.6, 1.0), vec3(1.0, 0.35, 0.2), t);
+    color += fresnel * 0.4 * edgeColor;
+    alpha = min(1.0, alpha + fresnel * 0.2);
 
-    float stripe = step(0.92, fract(vUv.y * 42.0));
-    color *= (1.0 - stripe * 0.35);
-    alpha *= (1.0 - stripe * 0.2);
+    float stripe = step(0.93, fract(vUv.y * 45.0));
+    color *= (1.0 - stripe * 0.3);
+    alpha *= (1.0 - stripe * 0.15);
 
-    float led = step(0.97, fract(vUv.x * 80.0)) * step(0.93, fract(vUv.y * 20.0));
-    color += led * mix(vec3(0.0, 1.0, 0.3), vec3(1.0, 0.1, 0.0), smoothstep(0.4, 0.8, t));
-    alpha = max(alpha, led * 0.9);
+    float ledGrid = step(0.96, fract(vUv.x * 85.0)) * step(0.94, fract(vUv.y * 22.0));
+    float ledBright = mix(0.0, 1.0, smoothstep(0.35, 0.75, t));
+    vec3 ledColor = mix(vec3(0.0, 1.0, 0.4), vec3(1.0, 0.1, 0.0), ledBright);
+    color += ledGrid * ledColor * 0.8;
+    alpha = max(alpha, ledGrid * 0.85);
 
-    float pulse = sin(uTime * 3.0 + vWorldPos.y * 5.0) * 0.5 + 0.5;
-    color += (pulse * 0.06) * mix(vec3(0.0, 0.3, 0.8), vec3(1.0, 0.1, 0.1), t);
+    float pulse = sin(uTime * 2.5 + vWorldPos.y * 4.0 + vWorldPos.x * 2.0) * 0.5 + 0.5;
+    vec3 pulseColor = mix(vec3(0.1, 0.4, 1.0), vec3(1.0, 0.1, 0.1), t);
+    color += (pulse * 0.05) * pulseColor;
 
-    color += uIsHover * vec3(0.2, 0.35, 0.5);
-    alpha += uIsHover * 0.25;
+    color += uIsHover * vec3(0.25, 0.4, 0.6);
+    alpha += uIsHover * 0.2;
 
     gl_FragColor = vec4(color, alpha);
   }
 `;
 
 const cableVertexShader = `
-  varying vec3 vLineDir;
+  attribute vec3 aLineDir;
+  attribute float aAlphaBase;
+  attribute float aColorTint;
+  
   varying vec3 vViewDir;
+  varying vec3 vLineDir;
   varying float vAlphaBase;
-  attribute float aAlpha;
+  varying float vColorTint;
+  
   void main() {
     vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
     vViewDir = normalize(-mvPos.xyz);
-    vAlphaBase = aAlpha;
-    vec3 worldPos = (modelMatrix * vec4(position, 1.0)).xyz;
-    vLineDir = normalize(position - vec3(0.0));
+    vLineDir = normalize(mat3(modelViewMatrix) * aLineDir);
+    vAlphaBase = aAlphaBase;
+    vColorTint = aColorTint;
     gl_Position = projectionMatrix * mvPos;
   }
 `;
 
 const cableFragmentShader = `
   uniform float uTime;
-  varying vec3 vLineDir;
+  uniform float uTemp;
   varying vec3 vViewDir;
+  varying vec3 vLineDir;
   varying float vAlphaBase;
+  varying float vColorTint;
+  
   void main() {
-    float viewFactor = abs(dot(vLineDir, vViewDir));
-    float edgeFade = pow(1.0 - viewFactor, 1.8);
-    float alpha = vAlphaBase * edgeFade;
-    vec3 color = mix(vec3(0.25, 0.55, 1.0), vec3(0.1, 0.8, 1.0), 0.5);
-    float flick = 0.85 + 0.15 * sin(uTime * 6.0 + gl_FragCoord.x * 0.1);
-    gl_FragColor = vec4(color * flick, alpha);
+    float dotProduct = abs(dot(vLineDir, vViewDir));
+    float angleFactor = pow(1.0 - dotProduct, 2.0);
+    
+    float distanceFade = 1.0;
+    float alpha = vAlphaBase * angleFactor * distanceFade;
+    
+    vec3 blueTint = vec3(0.2, 0.55, 1.0);
+    vec3 cyanTint = vec3(0.15, 0.8, 1.0);
+    vec3 greenTint = vec3(0.2, 1.0, 0.5);
+    vec3 warmTint = vec3(0.9, 0.5, 0.2);
+    
+    vec3 lineColor;
+    if (vColorTint < 0.33) {
+      lineColor = mix(blueTint, cyanTint, vColorTint * 3.0);
+    } else if (vColorTint < 0.66) {
+      lineColor = mix(cyanTint, greenTint, (vColorTint - 0.33) * 3.0);
+    } else {
+      lineColor = mix(greenTint, warmTint, (vColorTint - 0.66) * 3.0);
+    }
+    
+    float flicker = 0.85 + 0.15 * sin(uTime * 7.0 + gl_FragCoord.x * 0.08 + gl_FragCoord.y * 0.05);
+    float dataFlow = 0.7 + 0.3 * sin(uTime * 4.0 + gl_FragCoord.x * 0.02);
+    
+    vec3 finalColor = lineColor * flicker * dataFlow;
+    
+    gl_FragColor = vec4(finalColor, alpha);
   }
 `;
 
-const rackMaterialCache = new Map();
+const nodeVertexShader = `
+  attribute float aAlphaBase;
+  attribute float aColorTint;
+  varying float vAlphaBase;
+  varying float vColorTint;
+  varying vec3 vViewPos;
+  
+  void main() {
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewPos = mvPos.xyz;
+    vAlphaBase = aAlphaBase;
+    vColorTint = aColorTint;
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+const nodeFragmentShader = `
+  uniform float uTime;
+  varying float vAlphaBase;
+  varying float vColorTint;
+  varying vec3 vViewPos;
+  
+  void main() {
+    vec2 center = gl_PointCoord - vec2(0.5);
+    float dist = length(center);
+    if (dist > 0.5) discard;
+    
+    float glow = 1.0 - smoothstep(0.0, 0.5, dist);
+    glow = pow(glow, 1.5);
+    
+    vec3 blueGlow = vec3(0.3, 0.6, 1.0);
+    vec3 cyanGlow = vec3(0.2, 0.9, 1.0);
+    vec3 greenGlow = vec3(0.3, 1.0, 0.6);
+    vec3 warmGlow = vec3(1.0, 0.5, 0.2);
+    
+    vec3 nodeColor;
+    if (vColorTint < 0.33) {
+      nodeColor = mix(blueGlow, cyanGlow, vColorTint * 3.0);
+    } else if (vColorTint < 0.66) {
+      nodeColor = mix(cyanGlow, greenGlow, (vColorTint - 0.33) * 3.0);
+    } else {
+      nodeColor = mix(greenGlow, warmGlow, (vColorTint - 0.66) * 3.0);
+    }
+    
+    float pulse = 0.8 + 0.2 * sin(uTime * 5.0 + vColorTint * 10.0);
+    float alpha = vAlphaBase * glow * pulse;
+    
+    gl_FragColor = vec4(nodeColor * pulse, alpha);
+  }
+`;
 
 function createRackMaterial(initialTemp) {
   const mat = new THREE.ShaderMaterial({
@@ -255,6 +346,7 @@ const RACK_W = 1.2;
 const RACK_H = 4.0;
 const RACK_D = 1.8;
 const RACK_GAP = 0.4;
+const RACK_SHELL_INSET = 0.02;
 
 const rackMeshes = [];
 const rackGroup = new THREE.Group();
@@ -298,112 +390,402 @@ function buildRacks() {
 
       const frameGeom = new THREE.BoxGeometry(RACK_W * 1.02, RACK_H * 1.02, RACK_D * 1.02);
       const frameMat = new THREE.MeshBasicMaterial({
-        color: 0x0a1520, wireframe: true, transparent: true, opacity: 0.15
+        color: 0x0a1520, wireframe: true, transparent: true, opacity: 0.12
       });
       const frame = new THREE.Mesh(frameGeom, frameMat);
       frame.position.y = RACK_H / 2;
       rack.add(frame);
 
-      const bodyGeom = new THREE.BoxGeometry(RACK_W, RACK_H, RACK_D);
-      const bodyMat = createRackMaterial(0.0);
-      const body = new THREE.Mesh(bodyGeom, bodyMat);
-      body.position.y = RACK_H / 2;
-      body.userData.isRackBody = true;
-      body.userData.rackIndex = idx;
-      rack.add(body);
+      const shellGeom = new THREE.BoxGeometry(
+        RACK_W - RACK_SHELL_INSET * 2,
+        RACK_H - RACK_SHELL_INSET * 2,
+        RACK_D - RACK_SHELL_INSET * 2
+      );
+      const shellMat = createRackMaterial(0.0);
+      const shell = new THREE.Mesh(shellGeom, shellMat);
+      shell.position.y = RACK_H / 2;
+      shell.userData.isRackBody = true;
+      shell.userData.rackIndex = idx;
+      rack.add(shell);
 
-      const cableGroup = createCablesForRack();
-      cableGroup.position.y = RACK_H / 2;
-      rack.add(cableGroup);
+      const internalNetwork = createInternalNetworkSystem();
+      internalNetwork.position.y = RACK_H / 2;
+      rack.add(internalNetwork);
+
+      const serverTrays = createServerTrays();
+      serverTrays.position.y = RACK_H / 2;
+      rack.add(serverTrays);
 
       rackGroup.add(rack);
-      rackMeshes.push({ group: rack, body, material: bodyMat, cables: cableGroup });
+      rackMeshes.push({ 
+        group: rack, 
+        body: shell, 
+        material: shellMat, 
+        cables: internalNetwork,
+        servers: serverTrays
+      });
     }
   }
 
-  const labels = {
-    rackCount: rows * cols,
-    sensorCount: config.totalSensors
-  };
-  document.getElementById('rackCount').textContent = labels.rackCount;
-  document.getElementById('sensorCount').textContent = labels.sensorCount;
+  document.getElementById('rackCount').textContent = rows * cols;
+  document.getElementById('sensorCount').textContent = config.totalSensors;
 }
 
-function createCablesForRack() {
+function createServerTrays() {
   const group = new THREE.Group();
-  const numBundles = 8;
-  const numSegments = 18;
+  const trayCount = 12;
+  const trayHeight = (RACK_H * 0.85) / trayCount;
+  const startY = -RACK_H * 0.4;
 
-  for (let b = 0; b < numBundles; b++) {
-    const startY = -RACK_H * 0.35 + (b / (numBundles - 1)) * RACK_H * 0.7;
-    const endY = startY + (Math.random() - 0.5) * RACK_H * 0.4;
-    const startX = -RACK_W * 0.35 + Math.random() * RACK_W * 0.7;
-    const endX = -RACK_W * 0.35 + Math.random() * RACK_W * 0.7;
-    const startZ = -RACK_D * 0.35 + Math.random() * RACK_D * 0.7;
-    const endZ = -RACK_D * 0.35 + Math.random() * RACK_D * 0.7;
+  for (let i = 0; i < trayCount; i++) {
+    const y = startY + i * trayHeight;
+    
+    const trayGeom = new THREE.BoxGeometry(
+      RACK_W * 0.85,
+      trayHeight * 0.7,
+      RACK_D * 0.8
+    );
+    const trayMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a2e,
+      metalness: 0.8,
+      roughness: 0.3,
+      transparent: true,
+      opacity: 0.25
+    });
+    const tray = new THREE.Mesh(trayGeom, trayMat);
+    tray.position.y = y;
+    group.add(tray);
 
-    const positions = [];
-    const alphas = [];
-
-    for (let s = 0; s < numSegments; s++) {
-      const t0 = s / numSegments;
-      const t1 = (s + 1) / numSegments;
-
-      const x0 = startX + (endX - startX) * t0 + (Math.random() - 0.5) * 0.12;
-      const y0 = startY + (endY - startY) * t0 + (Math.random() - 0.5) * 0.12;
-      const z0 = startZ + (endZ - startZ) * t0 + (Math.random() - 0.5) * 0.12;
-
-      const x1 = startX + (endX - startX) * t1 + (Math.random() - 0.5) * 0.12;
-      const y1 = startY + (endY - startY) * t1 + (Math.random() - 0.5) * 0.12;
-      const z1 = startZ + (endZ - startZ) * t1 + (Math.random() - 0.5) * 0.12;
-
-      positions.push(x0, y0, z0, x1, y1, z1);
-      const a = 0.35 + Math.random() * 0.35;
-      alphas.push(a, a);
+    const ledRowCount = 8;
+    for (let l = 0; l < ledRowCount; l++) {
+      const ledX = -RACK_W * 0.3 + (l / (ledRowCount - 1)) * RACK_W * 0.6;
+      const ledGeom = new THREE.BoxGeometry(0.015, 0.015, 0.02);
+      const ledMat = new THREE.MeshBasicMaterial({
+        color: Math.random() > 0.1 ? 0x00ff44 : 0xff3300,
+        transparent: true,
+        opacity: 0.8
+      });
+      const led = new THREE.Mesh(ledGeom, ledMat);
+      led.position.set(ledX, y, RACK_D * 0.38);
+      group.add(led);
     }
+  }
 
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geom.setAttribute('aAlpha', new THREE.Float32BufferAttribute(alphas, 1));
-    geom.computeBoundingSphere();
+  return group;
+}
 
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 } },
+function createInternalNetworkSystem() {
+  const group = new THREE.Group();
+  
+  const allPositions = [];
+  const allLineDirs = [];
+  const allAlphas = [];
+  const allColorTints = [];
+  const allNodePositions = [];
+  const allNodeAlphas = [];
+  const allNodeColorTints = [];
+
+  const nodeCount = 0;
+  const connectionPoints = [];
+
+  const frontPorts = [];
+  const backPorts = [];
+  const switchPorts = [];
+
+  const portRows = 6;
+  const portCols = 8;
+  for (let r = 0; r < portRows; r++) {
+    for (let c = 0; c < portCols; c++) {
+      const y = -RACK_H * 0.35 + (r / (portRows - 1)) * RACK_H * 0.7;
+      const x = -RACK_W * 0.3 + (c / (portCols - 1)) * RACK_W * 0.6;
+      
+      frontPorts.push({ x, y, z: RACK_D * 0.25 });
+      backPorts.push({ x, y, z: -RACK_D * 0.25 });
+      
+      switchPorts.push({ 
+        x: (Math.random() - 0.5) * RACK_W * 0.4, 
+        y: -RACK_H * 0.15 + Math.random() * RACK_H * 0.1,
+        z: 0 
+      });
+    }
+  }
+
+  const patchBays = [];
+  for (let i = 0; i < 4; i++) {
+    const y = -RACK_H * 0.35 + i * RACK_H * 0.22;
+    for (let j = 0; j < 24; j++) {
+      patchBays.push({
+        x: -RACK_W * 0.35 + (j / 23) * RACK_W * 0.7,
+        y: y,
+        z: RACK_D * 0.1 + (i % 2) * RACK_D * 0.1
+      });
+    }
+  }
+
+  connectionPoints.push(...frontPorts, ...backPorts, ...switchPorts, ...patchBays);
+
+  const horizontalCableCount = 20;
+  for (let h = 0; h < horizontalCableCount; h++) {
+    const y = -RACK_H * 0.4 + Math.random() * RACK_H * 0.8;
+    const z = -RACK_D * 0.35 + Math.random() * RACK_D * 0.7;
+    const startX = -RACK_W * 0.45;
+    const endX = RACK_W * 0.45;
+    
+    const segments = 8 + Math.floor(Math.random() * 8);
+    let prevX = startX;
+    let prevY = y + (Math.random() - 0.5) * 0.05;
+    let prevZ = z + (Math.random() - 0.5) * 0.05;
+    
+    for (let s = 0; s < segments; s++) {
+      const t = (s + 1) / segments;
+      const currX = startX + (endX - startX) * t;
+      const currY = y + (Math.random() - 0.5) * 0.08;
+      const currZ = z + (Math.random() - 0.5) * 0.08;
+      
+      allPositions.push(prevX, prevY, prevZ);
+      allPositions.push(currX, currY, currZ);
+      
+      const dx = currX - prevX;
+      const dy = currY - prevY;
+      const dz = currZ - prevZ;
+      const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      allLineDirs.push(dx/len, dy/len, dz/len);
+      allLineDirs.push(dx/len, dy/len, dz/len);
+      
+      const alpha = 0.3 + Math.random() * 0.4;
+      allAlphas.push(alpha, alpha);
+      
+      const tint = Math.random();
+      allColorTints.push(tint, tint);
+      
+      prevX = currX;
+      prevY = currY;
+      prevZ = currZ;
+    }
+  }
+
+  const verticalCableCount = 25;
+  for (let v = 0; v < verticalCableCount; v++) {
+    const x = -RACK_W * 0.4 + Math.random() * RACK_W * 0.8;
+    const z = -RACK_D * 0.35 + Math.random() * RACK_D * 0.7;
+    const startY = -RACK_H * 0.45;
+    const endY = RACK_H * 0.45;
+    
+    const segments = 10 + Math.floor(Math.random() * 10);
+    let prevX = x + (Math.random() - 0.5) * 0.05;
+    let prevY = startY;
+    let prevZ = z + (Math.random() - 0.5) * 0.05;
+    
+    for (let s = 0; s < segments; s++) {
+      const t = (s + 1) / segments;
+      const currX = x + (Math.random() - 0.5) * 0.06;
+      const currY = startY + (endY - startY) * t;
+      const currZ = z + (Math.random() - 0.5) * 0.06;
+      
+      allPositions.push(prevX, prevY, prevZ);
+      allPositions.push(currX, currY, currZ);
+      
+      const dx = currX - prevX;
+      const dy = currY - prevY;
+      const dz = currZ - prevZ;
+      const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      allLineDirs.push(dx/len, dy/len, dz/len);
+      allLineDirs.push(dx/len, dy/len, dz/len);
+      
+      const alpha = 0.35 + Math.random() * 0.35;
+      allAlphas.push(alpha, alpha);
+      
+      const tint = Math.random();
+      allColorTints.push(tint, tint);
+      
+      prevX = currX;
+      prevY = currY;
+      prevZ = currZ;
+    }
+  }
+
+  const depthCableCount = 18;
+  for (let d = 0; d < depthCableCount; d++) {
+    const x = -RACK_W * 0.35 + Math.random() * RACK_W * 0.7;
+    const y = -RACK_H * 0.4 + Math.random() * RACK_H * 0.8;
+    const startZ = -RACK_D * 0.35;
+    const endZ = RACK_D * 0.35;
+    
+    const segments = 6 + Math.floor(Math.random() * 8);
+    let prevX = x + (Math.random() - 0.5) * 0.04;
+    let prevY = y + (Math.random() - 0.5) * 0.04;
+    let prevZ = startZ;
+    
+    for (let s = 0; s < segments; s++) {
+      const t = (s + 1) / segments;
+      const currX = x + (Math.random() - 0.5) * 0.05;
+      const currY = y + (Math.random() - 0.5) * 0.05;
+      const currZ = startZ + (endZ - startZ) * t;
+      
+      allPositions.push(prevX, prevY, prevZ);
+      allPositions.push(currX, currY, currZ);
+      
+      const dx = currX - prevX;
+      const dy = currY - prevY;
+      const dz = currZ - prevZ;
+      const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      allLineDirs.push(dx/len, dy/len, dz/len);
+      allLineDirs.push(dx/len, dy/len, dz/len);
+      
+      const alpha = 0.4 + Math.random() * 0.35;
+      allAlphas.push(alpha, alpha);
+      
+      const tint = Math.random();
+      allColorTints.push(tint, tint);
+      
+      prevX = currX;
+      prevY = currY;
+      prevZ = currZ;
+    }
+  }
+
+  const diagonalCount = 35;
+  for (let diag = 0; diag < diagonalCount; diag++) {
+    const idx1 = Math.floor(Math.random() * connectionPoints.length);
+    const idx2 = Math.floor(Math.random() * connectionPoints.length);
+    if (idx1 === idx2) continue;
+    
+    const p1 = connectionPoints[idx1];
+    const p2 = connectionPoints[idx2];
+    
+    const dist = Math.sqrt(
+      Math.pow(p2.x - p1.x, 2) + 
+      Math.pow(p2.y - p1.y, 2) + 
+      Math.pow(p2.z - p1.z, 2)
+    );
+    if (dist > RACK_H * 0.7) continue;
+    
+    const segments = 3 + Math.floor(Math.random() * 5);
+    const points = [];
+    points.push({ x: p1.x, y: p1.y, z: p1.z });
+    
+    for (let s = 1; s < segments; s++) {
+      const t = s / segments;
+      points.push({
+        x: p1.x + (p2.x - p1.x) * t + (Math.random() - 0.5) * 0.08,
+        y: p1.y + (p2.y - p1.y) * t + (Math.random() - 0.5) * 0.08,
+        z: p1.z + (p2.z - p1.z) * t + (Math.random() - 0.5) * 0.08
+      });
+    }
+    points.push({ x: p2.x, y: p2.y, z: p2.z });
+    
+    for (let s = 0; s < points.length - 1; s++) {
+      const pa = points[s];
+      const pb = points[s + 1];
+      
+      allPositions.push(pa.x, pa.y, pa.z);
+      allPositions.push(pb.x, pb.y, pb.z);
+      
+      const dx = pb.x - pa.x;
+      const dy = pb.y - pa.y;
+      const dz = pb.z - pa.z;
+      const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      allLineDirs.push(dx/len, dy/len, dz/len);
+      allLineDirs.push(dx/len, dy/len, dz/len);
+      
+      const alpha = 0.35 + Math.random() * 0.35;
+      allAlphas.push(alpha, alpha);
+      
+      const tint = Math.random();
+      allColorTints.push(tint, tint);
+    }
+  }
+
+  for (const pt of connectionPoints) {
+    allNodePositions.push(pt.x, pt.y, pt.z);
+    allNodeAlphas.push(0.5 + Math.random() * 0.3);
+    allNodeColorTints.push(Math.random());
+  }
+
+  if (allPositions.length > 0) {
+    const cableGeom = new THREE.BufferGeometry();
+    cableGeom.setAttribute('position', new THREE.Float32BufferAttribute(allPositions, 3));
+    cableGeom.setAttribute('aLineDir', new THREE.Float32BufferAttribute(allLineDirs, 3));
+    cableGeom.setAttribute('aAlphaBase', new THREE.Float32BufferAttribute(allAlphas, 1));
+    cableGeom.setAttribute('aColorTint', new THREE.Float32BufferAttribute(allColorTints, 1));
+    cableGeom.computeBoundingSphere();
+
+    const cableMat = new THREE.ShaderMaterial({
+      uniforms: { 
+        uTime: { value: 0 },
+        uTemp: { value: 0 }
+      },
       vertexShader: cableVertexShader,
       fragmentShader: cableFragmentShader,
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
+      linewidth: 1
     });
 
-    const lines = new THREE.LineSegments(geom, mat);
-    group.add(lines);
+    const cableLines = new THREE.LineSegments(cableGeom, cableMat);
+    cableLines.userData.isCableSystem = true;
+    group.add(cableLines);
   }
 
-  const dotPositions = [];
-  const dotAlphas = [];
-  for (let i = 0; i < 40; i++) {
-    const px = (Math.random() - 0.5) * RACK_W * 0.8;
-    const py = (Math.random() - 0.5) * RACK_H * 0.8;
-    const pz = (Math.random() - 0.5) * RACK_D * 0.8;
-    dotPositions.push(px, py, pz);
-    dotPositions.push(px + 0.01, py, pz);
-    const a = 0.5 + Math.random() * 0.5;
-    dotAlphas.push(a, a);
+  if (allNodePositions.length > 0) {
+    const nodeGeom = new THREE.BufferGeometry();
+    nodeGeom.setAttribute('position', new THREE.Float32BufferAttribute(allNodePositions, 3));
+    nodeGeom.setAttribute('aAlphaBase', new THREE.Float32BufferAttribute(allNodeAlphas, 1));
+    nodeGeom.setAttribute('aColorTint', new THREE.Float32BufferAttribute(allNodeColorTints, 1));
+    nodeGeom.computeBoundingSphere();
+
+    const nodeMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: nodeVertexShader,
+      fragmentShader: nodeFragmentShader,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      size: 6,
+      sizeAttenuation: true
+    });
+
+    const nodes = new THREE.Points(nodeGeom, nodeMat);
+    nodes.userData.isNodeSystem = true;
+    group.add(nodes);
   }
-  const dotGeom = new THREE.BufferGeometry();
-  dotGeom.setAttribute('position', new THREE.Float32BufferAttribute(dotPositions, 3));
-  dotGeom.setAttribute('aAlpha', new THREE.Float32BufferAttribute(dotAlphas, 1));
-  const dotMat = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 } },
+
+  const busPositions = [];
+  const busDirs = [];
+  const busAlphas = [];
+  const busTints = [];
+  
+  for (let side = 0; side < 2; side++) {
+    const sideX = side === 0 ? -RACK_W * 0.42 : RACK_W * 0.42;
+    for (let z = 0; z < 3; z++) {
+      const busZ = -RACK_D * 0.3 + z * RACK_D * 0.3;
+      
+      busPositions.push(sideX, -RACK_H * 0.45, busZ);
+      busPositions.push(sideX, RACK_H * 0.45, busZ);
+      busDirs.push(0, 1, 0, 0, 1, 0);
+      busAlphas.push(0.5, 0.5);
+      busTints.push(0.1, 0.1);
+    }
+  }
+  
+  const busGeom = new THREE.BufferGeometry();
+  busGeom.setAttribute('position', new THREE.Float32BufferAttribute(busPositions, 3));
+  busGeom.setAttribute('aLineDir', new THREE.Float32BufferAttribute(busDirs, 3));
+  busGeom.setAttribute('aAlphaBase', new THREE.Float32BufferAttribute(busAlphas, 1));
+  busGeom.setAttribute('aColorTint', new THREE.Float32BufferAttribute(busTints, 1));
+  
+  const busMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uTemp: { value: 0 } },
     vertexShader: cableVertexShader,
     fragmentShader: cableFragmentShader,
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending
   });
-  const dotLines = new THREE.LineSegments(dotGeom, dotMat);
-  group.add(dotLines);
+  
+  const busLines = new THREE.LineSegments(busGeom, busMat);
+  group.add(busLines);
 
   return group;
 }
@@ -436,6 +818,12 @@ function updateRackTemperatures() {
         rackMeshes[idx].material.uniforms.uTemp.value = normalized;
         rackMeshes[idx].group.userData.avgTemp = avg;
         rackMeshes[idx].group.userData.maxTemp = maxT;
+        
+        rackMeshes[idx].cables.traverse(obj => {
+          if (obj.material && obj.material.uniforms && obj.material.uniforms.uTemp) {
+            obj.material.uniforms.uTemp.value = normalized;
+          }
+        });
       }
     }
   }
