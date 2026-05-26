@@ -15,18 +15,13 @@ let animationId = null;
 const CANVAS_SIZE = 900;
 const CENTER_X = CANVAS_SIZE / 2;
 const CENTER_Y = CANVAS_SIZE / 2;
-const OUTER_RADIUS = 380;
-const INNER_RADIUS = 300;
-const BAND_MIN_WIDTH = 1;
-const BAND_MAX_WIDTH = 25;
-const GAP_ANGLE = 0.02;
+const OUTER_RADIUS = 400;
+const INNER_RADIUS = 320;
+const GAP_ANGLE = 0.008;
+const TOP_TRADE_RATIO = 0.2;
 
 canvas.width = CANVAS_SIZE;
 canvas.height = CANVAS_SIZE;
-
-function degToRad(deg) {
-  return deg * Math.PI / 180;
-}
 
 function polarToCartesian(radius, angle) {
   return {
@@ -62,190 +57,295 @@ function lerpColor(color1, color2, t) {
   );
 }
 
-function createGradient(ctx, x1, y1, x2, y2, color1, color2) {
-  const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
-  gradient.addColorStop(0, color1 + 'cc');
-  gradient.addColorStop(0.5, lerpColor(color1, color2, 0.5) + '99');
-  gradient.addColorStop(1, color2 + 'cc');
-  return gradient;
-}
-
-function calculateArcAngles(countries) {
-  const totalAngle = Math.PI * 2 - countries.length * GAP_ANGLE;
-  const avgAngle = totalAngle / countries.length;
-  let currentAngle = -Math.PI / 2;
-  
-  return countries.map((country, index) => {
-    const startAngle = currentAngle;
-    const endAngle = currentAngle + avgAngle;
-    const midAngle = (startAngle + endAngle) / 2;
-    
-    currentAngle = endAngle + GAP_ANGLE;
-    
+function calculateCountryStats(countries, trades) {
+  return countries.map(country => {
+    const countryTrades = trades.filter(t => t.from === country.code || t.to === country.code);
+    const totalExport = countryTrades
+      .filter(t => t.from === country.code)
+      .reduce((sum, t) => sum + t.export, 0);
+    const totalImport = countryTrades
+      .filter(t => t.to === country.code)
+      .reduce((sum, t) => sum + t.import, 0);
     return {
       ...country,
-      index,
-      startAngle,
-      endAngle,
-      midAngle,
-      outerStart: polarToCartesian(OUTER_RADIUS, startAngle),
-      outerEnd: polarToCartesian(OUTER_RADIUS, endAngle),
-      innerStart: polarToCartesian(INNER_RADIUS, startAngle),
-      innerEnd: polarToCartesian(INNER_RADIUS, endAngle),
-      midOuter: polarToCartesian(OUTER_RADIUS, midAngle),
-      midInner: polarToCartesian(INNER_RADIUS, midAngle)
+      totalExport,
+      totalImport,
+      totalTrade: totalExport + totalImport
     };
   });
 }
 
-function calculateTradeBands(countries, tradeData) {
-  const bands = [];
-  const maxTrade = Math.max(...tradeData.map(t => Math.max(t.export, t.import)));
+function calculateArcAngles(countriesWithStats) {
+  const totalGlobalTrade = countriesWithStats.reduce((sum, c) => sum + c.totalTrade, 0);
+  const totalAvailableAngle = Math.PI * 2 - countriesWithStats.length * GAP_ANGLE;
   
-  tradeData.forEach(trade => {
-    const fromCountry = countries.find(c => c.code === trade.from);
-    const toCountry = countries.find(c => c.code === trade.to);
+  let currentAngle = -Math.PI / 2;
+  
+  return countriesWithStats.map(country => {
+    const countryAngle = (country.totalTrade / totalGlobalTrade) * totalAvailableAngle;
+    const exportRatio = country.totalExport / country.totalTrade;
+    const importRatio = country.totalImport / country.totalTrade;
     
-    if (!fromCountry || !toCountry) return;
+    const exportAngle = countryAngle * exportRatio;
+    const importAngle = countryAngle * importRatio;
     
-    const fromIndex = countries.findIndex(c => c.code === trade.from);
-    const toIndex = countries.findIndex(c => c.code === trade.to);
+    const startAngle = currentAngle;
+    const exportEndAngle = startAngle + exportAngle;
+    const importEndAngle = exportEndAngle + importAngle;
+    const endAngle = importEndAngle;
     
-    const exportWidth = BAND_MIN_WIDTH + (trade.export / maxTrade) * (BAND_MAX_WIDTH - BAND_MIN_WIDTH);
-    const importWidth = BAND_MIN_WIDTH + (trade.import / maxTrade) * (BAND_MAX_WIDTH - BAND_MIN_WIDTH);
+    const exportMidAngle = (startAngle + exportEndAngle) / 2;
+    const importMidAngle = (exportEndAngle + importEndAngle) / 2;
+    const countryMidAngle = (startAngle + endAngle) / 2;
     
-    const fromMidAngle = fromCountry.midAngle;
-    const toMidAngle = toCountry.midAngle;
+    const arc = {
+      ...country,
+      startAngle,
+      endAngle,
+      countryAngle,
+      exportStartAngle: startAngle,
+      exportEndAngle,
+      importStartAngle: exportEndAngle,
+      importEndAngle: importEndAngle,
+      exportAngle,
+      importAngle,
+      exportMidAngle,
+      importMidAngle,
+      countryMidAngle
+    };
     
-    const fromInner = polarToCartesian(INNER_RADIUS - 5, fromMidAngle);
-    const toInner = polarToCartesian(INNER_RADIUS - 5, toMidAngle);
+    currentAngle = endAngle + GAP_ANGLE;
+    return arc;
+  });
+}
+
+function calculateTradeBands(countryArcs, trades) {
+  const bands = [];
+  
+  trades.forEach(trade => {
+    const fromArc = countryArcs.find(c => c.code === trade.from);
+    const toArc = countryArcs.find(c => c.code === trade.to);
+    
+    if (!fromArc || !toArc) return;
+    
+    const exportWidthOnFrom = (trade.export / fromArc.totalExport) * fromArc.exportAngle;
+    const importWidthOnTo = (trade.export / toArc.totalImport) * toArc.importAngle;
+    
+    let fromUsedAngle = 0;
+    const fromTrades = trades.filter(t => t.from === trade.from);
+    fromTrades.sort((a, b) => b.export - a.export);
+    for (const t of fromTrades) {
+      if (t === trade) break;
+      fromUsedAngle += (t.export / fromArc.totalExport) * fromArc.exportAngle;
+    }
+    
+    let toUsedAngle = 0;
+    const toTrades = trades.filter(t => t.to === trade.to);
+    toTrades.sort((a, b) => a.export - b.export);
+    for (const t of toTrades) {
+      if (t === trade) break;
+      toUsedAngle += (t.export / toArc.totalImport) * toArc.importAngle;
+    }
+    
+    const fromStartAngle = fromArc.exportStartAngle + fromUsedAngle;
+    const fromEndAngle = fromStartAngle + exportWidthOnFrom;
+    const fromMidAngle = (fromStartAngle + fromEndAngle) / 2;
+    
+    const toStartAngle = toArc.importStartAngle + toUsedAngle;
+    const toEndAngle = toStartAngle + importWidthOnTo;
+    const toMidAngle = (toStartAngle + toEndAngle) / 2;
+    
+    const fromOuter1 = polarToCartesian(OUTER_RADIUS, fromStartAngle);
+    const fromOuter2 = polarToCartesian(OUTER_RADIUS, fromEndAngle);
+    const fromInner1 = polarToCartesian(INNER_RADIUS, fromStartAngle);
+    const fromInner2 = polarToCartesian(INNER_RADIUS, fromEndAngle);
+    
+    const toOuter1 = polarToCartesian(OUTER_RADIUS, toStartAngle);
+    const toOuter2 = polarToCartesian(OUTER_RADIUS, toEndAngle);
+    const toInner1 = polarToCartesian(INNER_RADIUS, toStartAngle);
+    const toInner2 = polarToCartesian(INNER_RADIUS, toEndAngle);
+    
+    const fromMidInner = polarToCartesian(INNER_RADIUS - 2, fromMidAngle);
+    const toMidInner = polarToCartesian(INNER_RADIUS - 2, toMidAngle);
+    
+    const fromMidOuter = polarToCartesian(OUTER_RADIUS + 2, fromMidAngle);
+    const toMidOuter = polarToCartesian(OUTER_RADIUS + 2, toMidAngle);
     
     const angleDiff = Math.abs(toMidAngle - fromMidAngle);
-    const controlRadius = INNER_RADIUS * 0.6;
     const midAngle = (fromMidAngle + toMidAngle) / 2;
-    
     let controlPoint;
+    
     if (angleDiff > Math.PI) {
-      controlPoint = polarToCartesian(controlRadius * 0.8, midAngle + Math.PI);
+      const farMidAngle = midAngle + Math.PI;
+      controlPoint = polarToCartesian(INNER_RADIUS * 0.55, farMidAngle);
     } else {
-      controlPoint = polarToCartesian(controlRadius, midAngle);
+      controlPoint = polarToCartesian(INNER_RADIUS * 0.55, midAngle);
     }
     
     bands.push({
-      type: 'export',
-      from: fromCountry,
-      to: toCountry,
-      fromIndex,
-      toIndex,
+      from: fromArc,
+      to: toArc,
       value: trade.export,
-      width: exportWidth,
-      fromPoint: fromInner,
-      toPoint: toInner,
+      trade,
+      fromStartAngle,
+      fromEndAngle,
+      toStartAngle,
+      toEndAngle,
+      fromMidAngle,
+      toMidAngle,
+      fromOuter1,
+      fromOuter2,
+      fromInner1,
+      fromInner2,
+      toOuter1,
+      toOuter2,
+      toInner1,
+      toInner2,
+      fromMidInner,
+      toMidInner,
+      fromMidOuter,
+      toMidOuter,
       controlPoint,
-      color: fromCountry.color,
-      toColor: toCountry.color,
-      trade
-    });
-    
-    bands.push({
-      type: 'import',
-      from: toCountry,
-      to: fromCountry,
-      fromIndex: toIndex,
-      toIndex: fromIndex,
-      value: trade.import,
-      width: importWidth,
-      fromPoint: toInner,
-      toPoint: fromInner,
-      controlPoint,
-      color: toCountry.color,
-      toColor: fromCountry.color,
-      trade
+      width1: exportWidthOnFrom,
+      width2: importWidthOnTo
     });
   });
   
-  return bands.sort((a, b) => a.width - b.width);
+  bands.sort((a, b) => a.value - b.value);
+  
+  const topCount = Math.ceil(bands.length * TOP_TRADE_RATIO);
+  const sortedValues = [...bands].sort((a, b) => b.value - a.value);
+  const topThreshold = sortedValues[Math.min(topCount, sortedValues.length - 1)].value;
+  
+  bands.forEach(band => {
+    band.isTopTrade = band.value >= topThreshold;
+  });
+  
+  return bands;
 }
 
-function drawArc(arc, isHovered) {
+function drawCountryArc(arc, isHovered, isRelated) {
   ctx.save();
+  
+  ctx.beginPath();
+  ctx.arc(CENTER_X, CENTER_Y, OUTER_RADIUS, arc.exportStartAngle, arc.exportEndAngle);
+  ctx.arc(CENTER_X, CENTER_Y, INNER_RADIUS, arc.exportEndAngle, arc.exportStartAngle, true);
+  ctx.closePath();
+  
+  const exportGradient = ctx.createRadialGradient(
+    CENTER_X, CENTER_Y, INNER_RADIUS,
+    CENTER_X, CENTER_Y, OUTER_RADIUS
+  );
+  exportGradient.addColorStop(0, arc.color + 'cc');
+  exportGradient.addColorStop(1, arc.color + 'ff');
+  
+  ctx.fillStyle = exportGradient;
+  ctx.globalAlpha = isHovered || isRelated ? 1 : 0.85;
+  ctx.fill();
+  
+  ctx.beginPath();
+  ctx.arc(CENTER_X, CENTER_Y, OUTER_RADIUS, arc.importStartAngle, arc.importEndAngle);
+  ctx.arc(CENTER_X, CENTER_Y, INNER_RADIUS, arc.importEndAngle, arc.importStartAngle, true);
+  ctx.closePath();
+  
+  const importGradient = ctx.createRadialGradient(
+    CENTER_X, CENTER_Y, INNER_RADIUS,
+    CENTER_X, CENTER_Y, OUTER_RADIUS
+  );
+  importGradient.addColorStop(0, arc.color + '66');
+  importGradient.addColorStop(1, arc.color + '99');
+  
+  ctx.fillStyle = importGradient;
+  ctx.globalAlpha = isHovered || isRelated ? 0.9 : 0.7;
+  ctx.fill();
+  
+  ctx.strokeStyle = isHovered ? '#ffffff' : 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = isHovered ? 2 : 0.5;
   
   ctx.beginPath();
   ctx.arc(CENTER_X, CENTER_Y, OUTER_RADIUS, arc.startAngle, arc.endAngle);
   ctx.arc(CENTER_X, CENTER_Y, INNER_RADIUS, arc.endAngle, arc.startAngle, true);
   ctx.closePath();
+  ctx.stroke();
   
-  const gradient = ctx.createRadialGradient(
-    CENTER_X, CENTER_Y, INNER_RADIUS,
-    CENTER_X, CENTER_Y, OUTER_RADIUS
-  );
-  gradient.addColorStop(0, arc.color + '99');
-  gradient.addColorStop(1, arc.color + 'ff');
-  
-  ctx.fillStyle = gradient;
-  ctx.fill();
-  
-  ctx.strokeStyle = isHovered ? '#ffffff' : 'rgba(255,255,255,0.3)';
-  ctx.lineWidth = isHovered ? 3 : 1;
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(polarToCartesian(INNER_RADIUS, arc.exportEndAngle).x, polarToCartesian(INNER_RADIUS, arc.exportEndAngle).y);
+  ctx.lineTo(polarToCartesian(OUTER_RADIUS, arc.exportEndAngle).x, polarToCartesian(OUTER_RADIUS, arc.exportEndAngle).y);
   ctx.stroke();
   
   const labelRadius = (OUTER_RADIUS + INNER_RADIUS) / 2;
-  const labelPoint = polarToCartesian(labelRadius, arc.midAngle);
+  const labelPoint = polarToCartesian(labelRadius, arc.countryMidAngle);
   
   ctx.save();
   ctx.translate(labelPoint.x, labelPoint.y);
   
-  let rotation = arc.midAngle + Math.PI / 2;
+  let rotation = arc.countryMidAngle + Math.PI / 2;
   if (rotation > Math.PI / 2 && rotation < Math.PI * 1.5) {
     rotation += Math.PI;
   }
   ctx.rotate(rotation);
   
   ctx.fillStyle = '#ffffff';
-  ctx.font = isHovered ? 'bold 14px sans-serif' : '12px sans-serif';
+  ctx.font = isHovered ? 'bold 13px sans-serif' : '11px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.globalAlpha = 1;
   ctx.fillText(arc.code, 0, 0);
   
   ctx.restore();
   ctx.restore();
 }
 
-function drawBand(band, progress) {
-  if (progress <= 0) return;
+function drawTaperedBand(band, alpha) {
+  if (alpha <= 0) return;
   
   ctx.save();
   
-  const p1 = band.fromPoint;
-  const p2 = band.toPoint;
+  const p1a = band.fromInner1;
+  const p1b = band.fromInner2;
+  const p2a = band.toInner1;
+  const p2b = band.toInner2;
+  
   const cp = band.controlPoint;
   
-  const t = progress;
-  const currentP1 = {
-    x: p1.x + (cp.x - p1.x) * t * 0.3,
-    y: p1.y + (cp.y - p1.y) * t * 0.3
+  const midP1 = {
+    x: (p1a.x + p1b.x) / 2,
+    y: (p1a.y + p1b.y) / 2
   };
-  const currentP2 = {
-    x: p2.x + (cp.x - p2.x) * t * 0.3,
-    y: p2.y + (cp.y - p2.y) * t * 0.3
+  const midP2 = {
+    x: (p2a.x + p2b.x) / 2,
+    y: (p2a.y + p2b.y) / 2
   };
   
-  const gradient = createGradient(
-    ctx,
-    currentP1.x, currentP1.y,
-    currentP2.x, currentP2.y,
-    band.color,
-    band.toColor
-  );
+  const color1 = band.from.color;
+  const color2 = band.to.color;
+  
+  const gradient = ctx.createLinearGradient(midP1.x, midP1.y, midP2.x, midP2.y);
+  gradient.addColorStop(0, color1 + Math.floor(alpha * 200).toString(16).padStart(2, '0'));
+  gradient.addColorStop(0.3, lerpColor(color1, color2, 0.3) + Math.floor(alpha * 180).toString(16).padStart(2, '0'));
+  gradient.addColorStop(0.7, lerpColor(color1, color2, 0.7) + Math.floor(alpha * 180).toString(16).padStart(2, '0'));
+  gradient.addColorStop(1, color2 + Math.floor(alpha * 200).toString(16).padStart(2, '0'));
   
   ctx.beginPath();
-  ctx.moveTo(currentP1.x, currentP1.y);
-  ctx.quadraticCurveTo(cp.x, cp.y, currentP2.x, currentP2.y);
-  ctx.strokeStyle = gradient;
-  ctx.lineWidth = band.width * progress;
-  ctx.lineCap = 'round';
-  ctx.globalAlpha = 0.7;
-  ctx.stroke();
+  ctx.moveTo(p1a.x, p1a.y);
+  ctx.quadraticCurveTo(cp.x, cp.y, p2a.x, p2a.y);
+  ctx.lineTo(p2b.x, p2b.y);
+  ctx.quadraticCurveTo(cp.x, cp.y, p1b.x, p1b.y);
+  ctx.closePath();
+  
+  ctx.fillStyle = gradient;
+  ctx.fill();
+  
+  if (alpha > 0.5) {
+    ctx.beginPath();
+    ctx.moveTo(midP1.x, midP1.y);
+    ctx.quadraticCurveTo(cp.x, cp.y, midP2.x, midP2.y);
+    ctx.strokeStyle = 'rgba(255,255,255,' + (alpha * 0.3) + ')';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
   
   ctx.restore();
 }
@@ -253,28 +353,33 @@ function drawBand(band, progress) {
 function drawBandHighlight(band) {
   ctx.save();
   
-  const p1 = band.fromPoint;
-  const p2 = band.toPoint;
+  const p1a = band.fromInner1;
+  const p1b = band.fromInner2;
+  const p2a = band.toInner1;
+  const p2b = band.toInner2;
   const cp = band.controlPoint;
   
   ctx.beginPath();
-  ctx.moveTo(p1.x, p1.y);
-  ctx.quadraticCurveTo(cp.x, cp.y, p2.x, p2.y);
+  ctx.moveTo(p1a.x, p1a.y);
+  ctx.quadraticCurveTo(cp.x, cp.y, p2a.x, p2a.y);
+  ctx.lineTo(p2b.x, p2b.y);
+  ctx.quadraticCurveTo(cp.x, cp.y, p1b.x, p1b.y);
+  ctx.closePath();
+  
   ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = band.width + 4;
-  ctx.lineCap = 'round';
-  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.8;
   ctx.stroke();
   
-  ctx.beginPath();
-  ctx.moveTo(p1.x, p1.y);
-  ctx.quadraticCurveTo(cp.x, cp.y, p2.x, p2.y);
-  const gradient = createGradient(ctx, p1.x, p1.y, p2.x, p2.y, band.color, band.toColor);
-  ctx.strokeStyle = gradient;
-  ctx.lineWidth = band.width;
-  ctx.lineCap = 'round';
+  const midP1 = { x: (p1a.x + p1b.x) / 2, y: (p1a.y + p1b.y) / 2 };
+  const midP2 = { x: (p2a.x + p2b.x) / 2, y: (p2a.y + p2b.y) / 2 };
+  const gradient = ctx.createLinearGradient(midP1.x, midP1.y, midP2.x, midP2.y);
+  gradient.addColorStop(0, band.from.color + 'ff');
+  gradient.addColorStop(1, band.to.color + 'ff');
+  
+  ctx.fillStyle = gradient;
   ctx.globalAlpha = 1;
-  ctx.stroke();
+  ctx.fill();
   
   ctx.restore();
 }
@@ -282,38 +387,51 @@ function drawBandHighlight(band) {
 function drawCenterInfo() {
   ctx.save();
   
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
   ctx.beginPath();
-  ctx.arc(CENTER_X, CENTER_Y, 120, 0, Math.PI * 2);
+  ctx.arc(CENTER_X, CENTER_Y, 100, 0, Math.PI * 2);
   ctx.fill();
   
-  ctx.strokeStyle = 'rgba(78, 205, 196, 0.3)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(78, 205, 196, 0.4)';
+  ctx.lineWidth = 1.5;
   ctx.stroke();
   
   ctx.fillStyle = '#4ecdc4';
-  ctx.font = 'bold 24px sans-serif';
+  ctx.font = 'bold 20px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('贸易流向', CENTER_X, CENTER_Y - 20);
+  ctx.fillText('全球贸易', CENTER_X, CENTER_Y - 15);
   
   if (tradeData) {
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '14px sans-serif';
-    ctx.fillText(`${tradeData.countries.length} 个国家`, CENTER_X, CENTER_Y + 10);
-    ctx.fillText(`${tradeData.trade.length} 条贸易线`, CENTER_X, CENTER_Y + 35);
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(`${tradeData.countries.length} 经济体`, CENTER_X, CENTER_Y + 10);
+    ctx.fillText('流向分析', CENTER_X, CENTER_Y + 28);
   }
   
   ctx.restore();
+}
+
+function getBandAlpha(band) {
+  if (hoveredBand === band) return 1;
+  
+  if (hoveredCountry) {
+    if (band.from === hoveredCountry || band.to === hoveredCountry) {
+      return 0.95;
+    }
+    return 0.05;
+  }
+  
+  return band.isTopTrade ? 0.75 : 0.15;
 }
 
 function render() {
   ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   
   ctx.save();
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
   ctx.beginPath();
-  ctx.arc(CENTER_X, CENTER_Y, OUTER_RADIUS + 20, 0, Math.PI * 2);
+  ctx.arc(CENTER_X, CENTER_Y, OUTER_RADIUS + 15, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
   
@@ -322,7 +440,8 @@ function render() {
   if (tradeBands.length > 0) {
     tradeBands.forEach(band => {
       if (band !== hoveredBand) {
-        drawBand(band, animationProgress);
+        const alpha = getBandAlpha(band) * animationProgress;
+        drawTaperedBand(band, alpha);
       }
     });
     
@@ -333,9 +452,9 @@ function render() {
   
   if (countryArcs.length > 0) {
     countryArcs.forEach(arc => {
-      const isHovered = hoveredCountry === arc || 
-        (hoveredBand && (hoveredBand.from === arc || hoveredBand.to === arc));
-      drawArc(arc, isHovered);
+      const isHovered = hoveredCountry === arc;
+      const isRelated = hoveredBand && (hoveredBand.from === arc || hoveredBand.to === arc);
+      drawCountryArc(arc, isHovered, isRelated);
     });
   }
 }
@@ -345,7 +464,7 @@ function pointInArc(x, y, arc) {
   const dy = y - CENTER_Y;
   const distance = Math.sqrt(dx * dx + dy * dy);
   
-  if (distance < INNER_RADIUS - 10 || distance > OUTER_RADIUS + 10) {
+  if (distance < INNER_RADIUS - 15 || distance > OUTER_RADIUS + 15) {
     return false;
   }
   
@@ -358,26 +477,40 @@ function pointInArc(x, y, arc) {
   if (endAngle < -Math.PI / 2) endAngle += Math.PI * 2;
   
   if (startAngle <= endAngle) {
-    return angle >= startAngle - GAP_ANGLE / 2 && angle <= endAngle + GAP_ANGLE / 2;
+    return angle >= startAngle - GAP_ANGLE && angle <= endAngle + GAP_ANGLE;
   } else {
-    return angle >= startAngle - GAP_ANGLE / 2 || angle <= endAngle + GAP_ANGLE / 2;
+    return angle >= startAngle - GAP_ANGLE || angle <= endAngle + GAP_ANGLE;
   }
 }
 
-function distanceToCurve(px, py, x1, y1, cx, cy, x2, y2) {
+function pointInTaperedBand(px, py, band) {
+  const p1a = band.fromInner1;
+  const p1b = band.fromInner2;
+  const p2a = band.toInner1;
+  const p2b = band.toInner2;
+  const cp = band.controlPoint;
+  
+  const steps = 30;
   let minDist = Infinity;
-  const steps = 20;
   
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const mt = 1 - t;
-    const x = mt * mt * x1 + 2 * mt * t * cx + t * t * x2;
-    const y = mt * mt * y1 + 2 * mt * t * cy + t * t * y2;
-    const dist = Math.sqrt((px - x) * (px - x) + (py - y) * (py - y));
-    minDist = Math.min(minDist, dist);
+    
+    const xa = mt * mt * p1a.x + 2 * mt * t * cp.x + t * t * p2a.x;
+    const ya = mt * mt * p1a.y + 2 * mt * t * cp.y + t * t * p2a.y;
+    const xb = mt * mt * p1b.x + 2 * mt * t * cp.x + t * t * p2b.x;
+    const yb = mt * mt * p1b.y + 2 * mt * t * cp.y + t * t * p2b.y;
+    
+    const mx = (xa + xb) / 2;
+    const my = (ya + yb) / 2;
+    const halfWidth = Math.sqrt((xb - xa) * (xb - xa) + (yb - ya) * (yb - ya)) / 2 + 3;
+    
+    const dist = Math.sqrt((px - mx) * (px - mx) + (py - my) * (py - my));
+    minDist = Math.min(minDist, dist - halfWidth);
   }
   
-  return minDist;
+  return minDist <= 0;
 }
 
 function getMousePos(e) {
@@ -405,15 +538,8 @@ canvas.addEventListener('mousemove', (e) => {
   
   if (!hoveredCountry) {
     for (let i = tradeBands.length - 1; i >= 0; i--) {
-      const band = tradeBands[i];
-      const dist = distanceToCurve(
-        pos.x, pos.y,
-        band.fromPoint.x, band.fromPoint.y,
-        band.controlPoint.x, band.controlPoint.y,
-        band.toPoint.x, band.toPoint.y
-      );
-      if (dist < band.width / 2 + 5) {
-        hoveredBand = band;
+      if (pointInTaperedBand(pos.x, pos.y, tradeBands[i])) {
+        hoveredBand = tradeBands[i];
         break;
       }
     }
@@ -433,26 +559,17 @@ canvas.addEventListener('mouseleave', () => {
 function updateInfoPanel() {
   if (hoveredCountry) {
     const country = hoveredCountry;
-    const countryTrades = tradeData.trade.filter(
-      t => t.from === country.code || t.to === country.code
-    );
-    const totalExport = countryTrades
-      .filter(t => t.from === country.code)
-      .reduce((sum, t) => sum + t.export, 0);
-    const totalImport = countryTrades
-      .filter(t => t.to === country.code)
-      .reduce((sum, t) => sum + t.import, 0);
-    const balance = totalExport - totalImport;
+    const balance = country.totalExport - country.totalImport;
     
     countryInfoEl.innerHTML = `
       <h3>${country.name} (${country.code})</h3>
       <div class="info-item">
         <div class="info-label">总出口</div>
-        <div class="info-value positive">${totalExport.toLocaleString()} 亿美元</div>
+        <div class="info-value positive">${country.totalExport.toLocaleString()} 亿美元</div>
       </div>
       <div class="info-item">
         <div class="info-label">总进口</div>
-        <div class="info-value negative">${totalImport.toLocaleString()} 亿美元</div>
+        <div class="info-value negative">${country.totalImport.toLocaleString()} 亿美元</div>
       </div>
       <div class="info-item">
         <div class="info-label">贸易差额</div>
@@ -461,44 +578,62 @@ function updateInfoPanel() {
         </div>
       </div>
       <div class="info-item">
-        <div class="info-label">贸易伙伴数</div>
-        <div class="info-value">${countryTrades.length} 个</div>
+        <div class="info-label">顺逆差率</div>
+        <div class="info-value ${balance >= 0 ? 'positive' : 'negative'}">
+          ${((balance / country.totalTrade) * 100).toFixed(1)}%
+        </div>
       </div>
     `;
   } else {
     countryInfoEl.innerHTML = `
       <h3>国家信息</h3>
       <p class="hint">悬停在圆弧上查看详情</p>
+      <p class="hint" style="margin-top: 8px; font-size: 0.8rem;">
+        圆弧左半段（深色）= 出口区<br>
+        圆弧右半段（浅色）= 进口区
+      </p>
     `;
   }
   
   if (hoveredBand) {
     const band = hoveredBand;
+    const reverseTrade = tradeData.trade.find(
+      t => t.from === band.to.code && t.to === band.from.code
+    );
+    const reverseValue = reverseTrade ? reverseTrade.export : 0;
+    const netFlow = band.value - reverseValue;
+    
     tradeInfoEl.innerHTML = `
       <h3>${band.from.name} → ${band.to.name}</h3>
       <div class="info-item">
-        <div class="info-label">${band.from.name} 出口</div>
-        <div class="info-value positive">${band.trade.export.toLocaleString()} 亿美元</div>
+        <div class="info-label">出口额</div>
+        <div class="info-value positive">${band.value.toLocaleString()} 亿美元</div>
       </div>
       <div class="info-item">
-        <div class="info-label">${band.to.name} 出口</div>
-        <div class="info-value positive">${band.trade.import.toLocaleString()} 亿美元</div>
+        <div class="info-label">反向进口</div>
+        <div class="info-value">${reverseValue.toLocaleString()} 亿美元</div>
       </div>
       <div class="info-item">
-        <div class="info-label">贸易差额</div>
-        <div class="info-value ${band.trade.balance >= 0 ? 'positive' : 'negative'}">
-          ${band.trade.balance >= 0 ? '+' : ''}${band.trade.balance.toLocaleString()} 亿美元
+        <div class="info-label">${band.from.name}顺差</div>
+        <div class="info-value ${netFlow >= 0 ? 'positive' : 'negative'}">
+          ${netFlow >= 0 ? '+' : ''}${netFlow.toLocaleString()} 亿美元
         </div>
       </div>
       <div class="info-item">
-        <div class="info-label">总贸易额</div>
-        <div class="info-value">${(band.trade.export + band.trade.import).toLocaleString()} 亿美元</div>
+        <div class="info-label">宽度比</div>
+        <div class="info-value">
+          ${(band.width1 / band.width2).toFixed(2)} : 1
+        </div>
       </div>
     `;
   } else {
     tradeInfoEl.innerHTML = `
       <h3>贸易详情</h3>
       <p class="hint">悬停在色带上查看贸易数据</p>
+      <p class="hint" style="margin-top: 8px; font-size: 0.8rem;">
+        色带两端宽度不同<br>
+        直观体现顺逆差关系
+      </p>
     `;
   }
 }
@@ -508,7 +643,8 @@ async function loadData() {
     const response = await fetch('/api/trade-data');
     tradeData = await response.json();
     
-    countryArcs = calculateArcAngles(tradeData.countries);
+    const countriesWithStats = calculateCountryStats(tradeData.countries, tradeData.trade);
+    countryArcs = calculateArcAngles(countriesWithStats);
     tradeBands = calculateTradeBands(countryArcs, tradeData.trade);
     
     animationProgress = 0;
@@ -524,7 +660,7 @@ function animate() {
   }
   
   function step() {
-    animationProgress += 0.03;
+    animationProgress += 0.025;
     if (animationProgress >= 1) {
       animationProgress = 1;
       render();
