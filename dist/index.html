@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>农业局虫害蔓延数据大盘</title>
+  <script type="module" crossorigin src="/assets/index-DlCMLm7n.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-B-adZ0B-.css">
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <div class="title">
+        <h1>🌾 农业虫害蔓延实时监测数据大盘</h1>
+        <div class="subtitle">Agricultural Pest Spread Monitoring Dashboard</div>
+      </div>
+      <div class="header-info">
+        <div class="info-item">
+          <span class="label">当前日期</span>
+          <span id="current-date" class="value">--</span>
+        </div>
+        <div class="info-item">
+          <span class="label">感染村镇</span>
+          <span id="infected-count" class="value danger">0</span>
+        </div>
+        <div class="info-item">
+          <span class="label">虫口总数</span>
+          <span id="total-pests" class="value warning">0</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <aside class="sidebar left">
+        <div class="panel">
+          <h3>📍 村镇列表</h3>
+          <div id="village-list" class="village-list"></div>
+        </div>
+      </aside>
+
+      <section class="map-container">
+        <canvas id="map-canvas"></canvas>
+        <div class="map-legend">
+          <div class="legend-title">感染浓度等值线</div>
+          <div class="legend-gradient"></div>
+          <div class="legend-labels">
+            <span>低</span>
+            <span>中</span>
+            <span>高</span>
+            <span>极高</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar right">
+        <div class="panel">
+          <h3>📊 蔓延趋势</h3>
+          <canvas id="trend-chart" width="280" height="150"></canvas>
+        </div>
+        <div class="panel">
+          <h3>⚠️ 高风险区域</h3>
+          <div id="risk-list" class="risk-list"></div>
+        </div>
+        <div class="panel">
+          <h3>⚙️ 推演参数</h3>
+          <div class="param-item">
+            <label>传播速率</label>
+            <input type="range" id="spread-rate" min="0.1" max="2" step="0.1" value="0.8">
+            <span id="spread-rate-value">0.8</span>
+          </div>
+          <div class="param-item">
+            <label>衰减系数</label>
+            <input type="range" id="decay-rate" min="0.01" max="0.1" step="0.01" value="0.03">
+            <span id="decay-rate-value">0.03</span>
+          </div>
+          <div class="param-item">
+            <label>风速影响</label>
+            <input type="range" id="wind-factor" min="0" max="1" step="0.1" value="0.3">
+            <span id="wind-factor-value">0.3</span>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="timeline-bar">
+      <button id="btn-prev" class="timeline-btn">◀</button>
+      <button id="btn-play" class="timeline-btn play">▶</button>
+      <button id="btn-next" class="timeline-btn">▶</button>
+      <div class="timeline-track">
+        <input type="range" id="timeline" min="0" max="29" value="0" step="1">
+        <div id="timeline-marks"></div>
+      </div>
+      <div class="timeline-info">
+        <span id="day-label">第 1 天</span>
+        <span id="speed-control">
+          <label>速度:</label>
+          <select id="play-speed">
+            <option value="2000">0.5x</option>
+            <option value="1000" selected>1x</option>
+            <option value="500">2x</option>
+            <option value="250">4x</option>
+          </select>
+        </span>
+      </div>
+    </footer>
+  </div>
+
+</body>
+</html>

@@ -11,13 +11,15 @@ class Dashboard {
     this.isPlaying = false;
     this.playInterval = null;
     this.playSpeed = 1000;
+    this.dirty = true;
+    this.lastSimParams = null;
     
     this.params = {
       spreadRate: 0.8,
       decayRate: 0.03,
       windFactor: 0.3,
       windVector: WIND_VECTOR,
-      gridResolution: 100
+      gridResolution: 80
     };
     
     this.simulator = new SpreadSimulator(VILLAGES, this.params);
@@ -260,25 +262,38 @@ class Dashboard {
     document.getElementById('day-label').textContent = `第 ${this.currentDay + 1} 天`;
   }
   
-  render() {
+  render(animationTime = 0) {
     const reportData = this.dailyReports[this.currentDay];
-    this.simulator.simulate(reportData, 2);
-    this.mapRenderer.render(this.simulator, reportData, this.currentDay, this.selectedVillageId);
+    
+    const simKey = `${this.currentDay}-${this.params.spreadRate}-${this.params.decayRate}-${this.params.windFactor}`;
+    if (simKey !== this.lastSimParams) {
+      this.simulator.simulate(reportData, 6);
+      this.lastSimParams = simKey;
+    }
+    
+    this.mapRenderer.render(
+      this.simulator,
+      reportData,
+      animationTime,
+      this.selectedVillageId,
+      this.params.windVector,
+      this.params.windFactor
+    );
     this.trendChart.render(this.currentDay);
   }
-  
+
   update() {
     this.updateHeaderStats();
     this.updateVillageList();
     this.updateRiskList();
     this.updateTimeline();
-    this.render();
+    this.lastSimParams = null;
+    this.render(Date.now() / 1500);
   }
-  
+
   animate() {
-    if (this.isPlaying || Math.sin(Date.now() / 500) !== 0) {
-      this.render();
-    }
+    const animationTime = Date.now() / 1500;
+    this.render(animationTime);
     requestAnimationFrame(() => this.animate());
   }
   
