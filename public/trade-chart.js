@@ -59,13 +59,20 @@ function lerpColor(color1, color2, t) {
 
 function calculateCountryStats(countries, trades) {
   return countries.map(country => {
-    const countryTrades = trades.filter(t => t.from === country.code || t.to === country.code);
-    const totalExport = countryTrades
-      .filter(t => t.from === country.code)
-      .reduce((sum, t) => sum + t.export, 0);
-    const totalImport = countryTrades
-      .filter(t => t.to === country.code)
-      .reduce((sum, t) => sum + t.import, 0);
+    let totalExport = 0;
+    let totalImport = 0;
+    
+    trades.forEach(trade => {
+      if (trade.from === country.code) {
+        totalExport += trade.export;
+        totalImport += trade.import;
+      }
+      if (trade.to === country.code) {
+        totalImport += trade.export;
+        totalExport += trade.import;
+      }
+    });
+    
     return {
       ...country,
       totalExport,
@@ -389,24 +396,56 @@ function drawCenterInfo() {
   
   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
   ctx.beginPath();
-  ctx.arc(CENTER_X, CENTER_Y, 100, 0, Math.PI * 2);
+  ctx.arc(CENTER_X, CENTER_Y, 110, 0, Math.PI * 2);
   ctx.fill();
   
-  ctx.strokeStyle = 'rgba(78, 205, 196, 0.4)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  
-  ctx.fillStyle = '#4ecdc4';
-  ctx.font = 'bold 20px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('全球贸易', CENTER_X, CENTER_Y - 15);
-  
-  if (tradeData) {
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  if (hoveredCountry) {
+    const balance = hoveredCountry.totalExport - hoveredCountry.totalImport;
+    const partnerCount = new Set(
+      tradeData.trade
+        .filter(t => t.from === hoveredCountry.code || t.to === hoveredCountry.code)
+        .map(t => t.from === hoveredCountry.code ? t.to : t.from)
+    ).size;
+    
+    ctx.strokeStyle = hoveredCountry.color + 'aa';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    ctx.fillStyle = hoveredCountry.color;
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${hoveredCountry.name}贸易`, CENTER_X, CENTER_Y - 30);
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '11px sans-serif';
+    ctx.fillText(`${partnerCount} 个贸易伙伴`, CENTER_X, CENTER_Y - 10);
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.font = '12px sans-serif';
-    ctx.fillText(`${tradeData.countries.length} 经济体`, CENTER_X, CENTER_Y + 10);
-    ctx.fillText('流向分析', CENTER_X, CENTER_Y + 28);
+    ctx.fillText(`出口 ${hoveredCountry.totalExport.toLocaleString()}`, CENTER_X, CENTER_Y + 10);
+    ctx.fillText(`进口 ${hoveredCountry.totalImport.toLocaleString()}`, CENTER_X, CENTER_Y + 28);
+    
+    ctx.fillStyle = balance >= 0 ? '#4ecdc4' : '#ff6b6b';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText(`净流向 ${balance >= 0 ? '+' : ''}${balance.toLocaleString()}`, CENTER_X, CENTER_Y + 46);
+  } else {
+    ctx.strokeStyle = 'rgba(78, 205, 196, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    
+    ctx.fillStyle = '#4ecdc4';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('全球贸易', CENTER_X, CENTER_Y - 15);
+    
+    if (tradeData) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(`${tradeData.countries.length} 经济体`, CENTER_X, CENTER_Y + 10);
+      ctx.fillText('流向分析', CENTER_X, CENTER_Y + 28);
+    }
   }
   
   ctx.restore();
