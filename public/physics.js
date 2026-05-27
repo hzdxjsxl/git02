@@ -65,9 +65,11 @@ class Ball {
 
   applyFriction(friction, dt) {
     const speed = this.velocity.length();
-    if (speed > 0) {
-      const decay = Math.max(0, 1 - friction * dt / speed);
+    if (speed > 0.001) {
+      const decay = Math.exp(-friction * dt / speed);
       this.velocity = this.velocity.mul(decay);
+    } else if (speed > 0) {
+      this.velocity = new Vector2(0, 0);
     }
   }
 
@@ -177,22 +179,47 @@ class PhysicsEngine {
       if (ball.isPocketed) return;
 
       const r = ball.radius;
+      const e = this.restitution;
       
       if (ball.position.x - r < 0) {
         ball.position.x = r;
-        ball.velocity.x = -ball.velocity.x * this.restitution;
+        if (ball.velocity.x < 0) {
+          const vn = ball.velocity.x;
+          const vt_x = 0;
+          const vt_y = ball.velocity.y;
+          ball.velocity.x = -vn * e + vt_x;
+          ball.velocity.y = vt_y;
+        }
       }
       if (ball.position.x + r > this.table.width) {
         ball.position.x = this.table.width - r;
-        ball.velocity.x = -ball.velocity.x * this.restitution;
+        if (ball.velocity.x > 0) {
+          const vn = ball.velocity.x;
+          const vt_x = 0;
+          const vt_y = ball.velocity.y;
+          ball.velocity.x = -vn * e + vt_x;
+          ball.velocity.y = vt_y;
+        }
       }
       if (ball.position.y - r < 0) {
         ball.position.y = r;
-        ball.velocity.y = -ball.velocity.y * this.restitution;
+        if (ball.velocity.y < 0) {
+          const vn = ball.velocity.y;
+          const vt_x = ball.velocity.x;
+          const vt_y = 0;
+          ball.velocity.x = vt_x;
+          ball.velocity.y = -vn * e + vt_y;
+        }
       }
       if (ball.position.y + r > this.table.height) {
         ball.position.y = this.table.height - r;
-        ball.velocity.y = -ball.velocity.y * this.restitution;
+        if (ball.velocity.y > 0) {
+          const vn = ball.velocity.y;
+          const vt_x = ball.velocity.x;
+          const vt_y = 0;
+          ball.velocity.x = vt_x;
+          ball.velocity.y = -vn * e + vt_y;
+        }
       }
     });
   }
