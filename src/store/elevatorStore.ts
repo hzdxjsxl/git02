@@ -12,9 +12,20 @@ import {
 import { BUILDING_CONFIG, SIMULATION_CONFIG } from '../constants/config';
 import { getScheduler } from '../scheduler';
 
+interface Passenger {
+  id: string;
+  startFloor: number;
+  destinationFloor: number;
+  callTime: number;
+  pickupTime: number | null;
+  dropoffTime: number | null;
+  elevatorId: number | null;
+}
+
 interface ElevatorStore {
   elevators: Elevator[];
   calls: CallRequest[];
+  passengers: Passenger[];
   buildingConfig: BuildingConfig;
   schedulerType: SchedulerType;
   trafficPattern: TrafficPattern;
@@ -25,8 +36,9 @@ interface ElevatorStore {
   totalCallsReceived: number;
   totalCallsCompleted: number;
   totalWaitTime: number;
+  totalRideTime: number;
   maxWaitTime: number;
-  
+
   setSchedulerType: (type: SchedulerType) => void;
   setSpeedMultiplier: (speed: number) => void;
   setTrafficPattern: (pattern: TrafficPattern) => void;
@@ -41,8 +53,8 @@ const createInitialElevators = (config: BuildingConfig): Elevator[] => {
     id: i,
     currentFloor: 1,
     targetFloors: [],
-    direction: 'idle',
-    state: 'idle',
+    direction: 'idle' as const,
+    state: 'idle' as const,
     passengers: 0,
     capacity: config.elevatorCapacity,
     doorTimer: 0,
@@ -65,6 +77,7 @@ const initialMetrics: PerformanceMetrics = {
 export const useElevatorStore = create<ElevatorStore>((set, get) => ({
   elevators: createInitialElevators(BUILDING_CONFIG),
   calls: [],
+  passengers: [],
   buildingConfig: BUILDING_CONFIG,
   schedulerType: 'smart',
   trafficPattern: 'morning',
@@ -75,6 +88,7 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
   totalCallsReceived: 0,
   totalCallsCompleted: 0,
   totalWaitTime: 0,
+  totalRideTime: 0,
   maxWaitTime: 0,
 
   setSchedulerType: (type) => set({ schedulerType: type }),
@@ -84,10 +98,23 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
     set((state) => ({ isRunning: running !== undefined ? running : !state.isRunning })),
 
   addCalls: (newCalls) => {
-    set((state) => ({
-      calls: [...state.calls, ...newCalls],
-      totalCallsReceived: state.totalCallsReceived + newCalls.length,
-    }));
+    set((state) => {
+      const newPassengers: Passenger[] = newCalls.map((call) => ({
+        id: call.id,
+        startFloor: call.floor,
+        destinationFloor: call.destinationFloor,
+        callTime: call.timestamp,
+        pickupTime: null,
+        dropoffTime: null,
+        elevatorId: null,
+      }));
+
+      return {
+        calls: [...state.calls, ...newCalls],
+        passengers: [...state.passengers, ...newPassengers],
+        totalCallsReceived: state.totalCallsReceived + newCalls.length,
+      };
+    });
   },
 
   stepSimulation: (deltaTime) => {
@@ -97,20 +124,27 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
     const {
       elevators: prevElevators,
       calls: prevCalls,
+      passengers: prevPassengers,
       buildingConfig,
       schedulerType,
       speedMultiplier,
+      totalCallsCompleted,
+      totalWaitTime,
+      totalRideTime,
+      maxWaitTime,
     } = state;
 
     const adjustedDelta = deltaTime * speedMultiplier;
     const timePerFloor = buildingConfig.timePerFloor / speedMultiplier;
     const doorOpenTime = buildingConfig.doorOpenTime / speedMultiplier;
 
-    let calls = [...prevCalls];
-    let elevators = prevElevators.map((e) => ({ ...e }));
-    let totalCallsCompleted = state.totalCallsCompleted;
-    let totalWaitTime = state.totalWaitTime;
-    let maxWaitTime = state.maxWaitTime;
+    let elevators = prevElevators.map((e) => ({ ...e, targetFloors: [...e.targetFloors] }));
+    let calls = prevCalls.map((c) => ({ ...c }));
+    let passengers = prevPassengers.map((p) => ({ ...p }));
+    let newTotalCallsCompleted = totalCallsCompleted;
+    let newTotalWaitTime = totalWaitTime;
+    let newTotalRideTime = totalRideTime;
+    let newMaxWaitTime = maxWaitTime;
 
     const now = Date.now();
 
@@ -120,15 +154,21 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
     }));
 
     const scheduler = getScheduler(schedulerType);
-    const dispatchResults = scheduler.dispatch(elevators, calls, buildingConfig);
+    const unassignedCalls = calls.filter((c) => c.assignedElevator === null && !c.picked);
+    const dispatchResults = scheduler.dispatch(elevators, unassignedCalls, buildingConfig);
 
     for (const result of dispatchResults) {
       const call = calls.find((c) => c.id === result.callId);
-      if (call && call.assignedElevator === null) {
+      const passenger = passengers.find((p) => p.id === result.callId);
+      if (call && call.assignedElevator === null && !call.picked && passenger) {
         call.assignedElevator = result.elevatorId;
+        passenger.elevatorId = result.elevatorId;
         const elevator = elevators.find((e) => e.id === result.elevatorId);
-        if (elevator && !elevator.targetFloors.includes(result.addTargetFloor)) {
-          elevator.targetFloors.push(result.addTargetFloor);
+        if (elevator) {
+          if (!elevator.targetFloors.includes(result.addTargetFloor)) {
+            const insertIndex = findInsertPosition(elevator, result.addTargetFloor);
+            elevator.targetFloors.splice(insertIndex, 0, result.addTargetFloor);
+          }
         }
       }
     }
@@ -136,48 +176,85 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
     for (const elevator of elevators) {
       if (elevator.state === 'door-open') {
         elevator.doorTimer -= adjustedDelta;
+
         if (elevator.doorTimer <= 0) {
+          const currentFloor = Math.round(elevator.currentFloor);
+
+          const arrivingPassengers = passengers.filter(
+            (p) =>
+              p.elevatorId === elevator.id &&
+              p.pickupTime !== null &&
+              p.dropoffTime === null &&
+              p.destinationFloor === currentFloor
+          );
+
+          for (const passenger of arrivingPassengers) {
+            passenger.dropoffTime = now;
+            const rideTime = passenger.dropoffTime - passenger.pickupTime!;
+            newTotalRideTime += rideTime;
+            newTotalCallsCompleted++;
+          }
+
+          const passengersAfterArrival = elevator.passengers - arrivingPassengers.length;
+          const availableSpace = Math.max(0, elevator.capacity - passengersAfterArrival);
+
+          const waitingPassengers = passengers.filter(
+            (p) =>
+              p.elevatorId === elevator.id &&
+              p.pickupTime === null &&
+              p.startFloor === currentFloor
+          );
+
+          const canBoard = waitingPassengers.slice(0, availableSpace);
+          const cannotBoard = waitingPassengers.slice(availableSpace);
+
+          for (const passenger of canBoard) {
+            passenger.pickupTime = now;
+            const waitTime = passenger.pickupTime - passenger.callTime;
+            newTotalWaitTime += waitTime;
+            newMaxWaitTime = Math.max(newMaxWaitTime, waitTime);
+
+            if (!elevator.targetFloors.includes(passenger.destinationFloor)) {
+              const insertIndex = findInsertPosition(elevator, passenger.destinationFloor);
+              elevator.targetFloors.splice(insertIndex, 0, passenger.destinationFloor);
+            }
+          }
+
+          for (const passenger of cannotBoard) {
+            passenger.elevatorId = null;
+            const call = calls.find((c) => c.id === passenger.id);
+            if (call) {
+              call.assignedElevator = null;
+            }
+          }
+
+          elevator.passengers = Math.min(
+            elevator.capacity,
+            passengersAfterArrival + canBoard.length
+          );
+          elevator.totalRides += canBoard.length;
+
+          const processedIds = new Set([
+            ...arrivingPassengers.map((p) => p.id),
+            ...canBoard.map((p) => p.id),
+          ]);
+
+          calls = calls.filter((c) => !processedIds.has(c.id) || !c.picked);
+          passengers = passengers.filter((p) => p.dropoffTime === null);
+
           elevator.state = 'idle';
           elevator.doorTimer = 0;
 
-          const pickedUp = calls.filter(
-            (c) =>
-              c.assignedElevator === elevator.id &&
-              c.floor === elevator.currentFloor &&
-              !c.picked
-          );
-
-          for (const call of pickedUp) {
-            call.picked = true;
-            const rideTime = 5000 + Math.random() * 10000;
-            totalWaitTime += call.waitTime;
-            maxWaitTime = Math.max(maxWaitTime, call.waitTime);
-            totalCallsCompleted++;
+          if (elevator.targetFloors.length === 0) {
+            elevator.direction = 'idle';
           }
-
-          const dropOffs = calls.filter(
-            (c) => c.picked && c.floor === elevator.currentFloor
-          );
-
-          for (const call of dropOffs) {
-            call.assignedElevator = -1;
-          }
-
-          calls = calls.filter((c) => c.assignedElevator !== -1);
-
-          elevator.passengers = Math.max(
-            0,
-            elevator.passengers + pickedUp.length - dropOffs.length
-          );
-          elevator.totalRides += pickedUp.length;
         }
         continue;
       }
 
       if (elevator.targetFloors.length > 0) {
         elevator.state = 'moving';
-
-        let nextFloor = elevator.targetFloors[0];
+        const nextFloor = elevator.targetFloors[0];
 
         if (elevator.currentFloor < nextFloor) {
           elevator.direction = 'up';
@@ -206,26 +283,25 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
     }
 
     const pendingCalls = calls.filter((c) => !c.picked).length;
-    const avgWaitTime = totalCallsCompleted > 0 ? totalWaitTime / totalCallsCompleted : 0;
+    const avgWaitTime = newTotalCallsCompleted > 0 ? newTotalWaitTime / newTotalCallsCompleted : 0;
+    const avgRideTime = newTotalCallsCompleted > 0 ? newTotalRideTime / newTotalCallsCompleted : 0;
 
     const elevatorUtilization = elevators.map(
       (e) => (e.passengers / e.capacity) * 100
     );
-    const avgUtilization =
-      elevatorUtilization.reduce((a, b) => a + b, 0) / elevatorUtilization.length;
 
     const congestionIndex = Math.min(
       100,
-      (pendingCalls / (buildingConfig.elevatorCount / 10)) * 100
+      (pendingCalls / Math.max(buildingConfig.elevatorCount * 5, 1)) * 100
     );
 
     const newMetrics: PerformanceMetrics = {
       avgWaitTime,
-      maxWaitTime,
-      avgRideTime: 0,
-      throughput: totalCallsCompleted,
+      maxWaitTime: newMaxWaitTime,
+      avgRideTime,
+      throughput: newTotalCallsCompleted,
       elevatorUtilization,
-      totalCallsProcessed: totalCallsCompleted,
+      totalCallsProcessed: newTotalCallsCompleted,
       pendingCalls,
       congestionIndex,
       timestamp: now,
@@ -234,7 +310,7 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
     const historyEntry: MetricsHistory = {
       timestamp: now,
       avgWaitTime,
-      throughput: totalCallsCompleted - state.metrics.totalCallsProcessed,
+      throughput: newTotalCallsCompleted - state.metrics.totalCallsProcessed,
       pendingCalls,
       congestionIndex,
     };
@@ -242,10 +318,12 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
     set({
       elevators,
       calls,
+      passengers,
       metrics: newMetrics,
-      totalCallsCompleted,
-      totalWaitTime,
-      maxWaitTime,
+      totalCallsCompleted: newTotalCallsCompleted,
+      totalWaitTime: newTotalWaitTime,
+      totalRideTime: newTotalRideTime,
+      maxWaitTime: newMaxWaitTime,
       metricsHistory: [
         ...state.metricsHistory.slice(-SIMULATION_CONFIG.metricsHistorySize),
         historyEntry,
@@ -257,18 +335,70 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
     set({
       elevators: createInitialElevators(BUILDING_CONFIG),
       calls: [],
+      passengers: [],
       metrics: initialMetrics,
       metricsHistory: [],
       totalCallsReceived: 0,
       totalCallsCompleted: 0,
       totalWaitTime: 0,
+      totalRideTime: 0,
       maxWaitTime: 0,
     }),
 }));
 
+function findInsertPosition(elevator: Elevator, targetFloor: number): number {
+  if (elevator.targetFloors.length === 0) return 0;
+
+  const currentFloor = Math.round(elevator.currentFloor);
+  const direction = elevator.direction;
+
+  if (direction === 'up') {
+    if (targetFloor > currentFloor) {
+      for (let i = 0; i < elevator.targetFloors.length; i++) {
+        if (elevator.targetFloors[i] > currentFloor && elevator.targetFloors[i] > targetFloor) {
+          return i;
+        }
+      }
+      return elevator.targetFloors.length;
+    } else {
+      for (let i = 0; i < elevator.targetFloors.length; i++) {
+        if (elevator.targetFloors[i] < currentFloor && elevator.targetFloors[i] > targetFloor) {
+          return i;
+        }
+      }
+      return elevator.targetFloors.length;
+    }
+  } else if (direction === 'down') {
+    if (targetFloor < currentFloor) {
+      for (let i = 0; i < elevator.targetFloors.length; i++) {
+        if (elevator.targetFloors[i] < currentFloor && elevator.targetFloors[i] < targetFloor) {
+          return i;
+        }
+      }
+      return elevator.targetFloors.length;
+    } else {
+      for (let i = 0; i < elevator.targetFloors.length; i++) {
+        if (elevator.targetFloors[i] > currentFloor && elevator.targetFloors[i] < targetFloor) {
+          return i;
+        }
+      }
+      return elevator.targetFloors.length;
+    }
+  }
+
+  const distance = Math.abs(targetFloor - currentFloor);
+  for (let i = 0; i < elevator.targetFloors.length; i++) {
+    if (Math.abs(elevator.targetFloors[i] - currentFloor) > distance) {
+      return i;
+    }
+  }
+  return elevator.targetFloors.length;
+}
+
 export const useFloorCallStatus = (): FloorCallStatus[] => {
   const calls = useElevatorStore((state) => state.calls);
   const buildingConfig = useElevatorStore((state) => state.buildingConfig);
+  const passengers = useElevatorStore((state) => state.passengers);
 
   const statusMap = new Map<number, FloorCallStatus>();
 
@@ -283,6 +413,7 @@ export const useFloorCallStatus = (): FloorCallStatus[] => {
   }
 
   for (const call of calls) {
+    if (call.picked) continue;
     const status = statusMap.get(call.floor);
     if (status) {
       if (call.direction === 'up') {

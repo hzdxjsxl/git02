@@ -1,13 +1,8 @@
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { useElevatorStore } from '../store/elevatorStore';
 import { COLORS } from '../constants/config';
-import { Users, Clock, AlertTriangle, Zap } from 'lucide-react';
-
-const formatTime = (ms: number): string => {
-  if (ms < 1000) return `${ms.toFixed(0)}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}m`;
-};
+import { formatTime, formatPercent, formatNumber, formatInt } from '../utils/format';
+import { Users, Clock, AlertTriangle, Zap, TrendingUp } from 'lucide-react';
 
 export const KPIDashboard = () => {
   const { metrics, metricsHistory, totalCallsReceived, totalCallsCompleted, elevators } =
@@ -15,22 +10,28 @@ export const KPIDashboard = () => {
 
   const chartData = metricsHistory.slice(-30).map((h) => ({
     time: new Date(h.timestamp).toLocaleTimeString(),
-    avgWaitTime: h.avgWaitTime / 1000,
+    avgWaitTime: Number((h.avgWaitTime / 1000).toFixed(1)),
     pendingCalls: h.pendingCalls,
     throughput: h.throughput,
-    congestion: h.congestionIndex,
+    congestion: Number(h.congestionIndex.toFixed(0)),
   }));
 
-  const avgUtilization =
-    metrics.elevatorUtilization.reduce((a, b) => a + b, 0) /
-    Math.max(metrics.elevatorUtilization.length, 1);
-
-  const getScoreColor = (value: number, max: number) => {
+  const getScoreColor = (value: number, max: number, invert = false) => {
     const ratio = value / max;
-    if (ratio > 0.7) return COLORS.danger;
-    if (ratio > 0.4) return COLORS.warning;
+    const effectiveRatio = invert ? 1 - ratio : ratio;
+    if (effectiveRatio > 0.7) return COLORS.danger;
+    if (effectiveRatio > 0.4) return COLORS.warning;
     return COLORS.success;
   };
+
+  const completionRate = totalCallsReceived > 0
+    ? (totalCallsCompleted / totalCallsReceived) * 100
+    : 0;
+
+  const avgUtilization =
+    metrics.elevatorUtilization.length > 0
+      ? metrics.elevatorUtilization.reduce((a, b) => a + b, 0) / metrics.elevatorUtilization.length
+      : 0;
 
   return (
     <div className="space-y-4">
@@ -79,7 +80,28 @@ export const KPIDashboard = () => {
 
         <div className="p-4 rounded-xl" style={{ backgroundColor: COLORS.darkLight }}>
           <div className="flex items-center gap-2 mb-2">
-            <Users size={16} style={{ color: COLORS.secondary }} />
+            <TrendingUp size={16} style={{ color: COLORS.secondary }} />
+            <span
+              className="text-xs"
+              style={{ color: COLORS.textMuted, fontFamily: 'JetBrains Mono, monospace' }}
+            >
+              平均行程
+            </span>
+          </div>
+          <div
+            className="text-2xl font-bold"
+            style={{
+              color: COLORS.secondary,
+              fontFamily: 'JetBrains Mono, monospace',
+            }}
+          >
+            {formatTime(metrics.avgRideTime)}
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl" style={{ backgroundColor: COLORS.darkLight }}>
+          <div className="flex items-center gap-2 mb-2">
+            <Users size={16} style={{ color: COLORS.warning }} />
             <span
               className="text-xs"
               style={{ color: COLORS.textMuted, fontFamily: 'JetBrains Mono, monospace' }}
@@ -94,7 +116,7 @@ export const KPIDashboard = () => {
               fontFamily: 'JetBrains Mono, monospace',
             }}
           >
-            {metrics.pendingCalls}
+            {formatInt(metrics.pendingCalls)}
           </div>
         </div>
 
@@ -105,14 +127,35 @@ export const KPIDashboard = () => {
               className="text-xs"
               style={{ color: COLORS.textMuted, fontFamily: 'JetBrains Mono, monospace' }}
             >
-              吞吐量
+              已完成
             </span>
           </div>
           <div
             className="text-2xl font-bold"
             style={{ color: COLORS.success, fontFamily: 'JetBrains Mono, monospace' }}
           >
-            {totalCallsCompleted}
+            {formatInt(totalCallsCompleted)}
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl" style={{ backgroundColor: COLORS.darkLight }}>
+          <div className="flex items-center gap-2 mb-2">
+            <Users size={16} style={{ color: COLORS.primary }} />
+            <span
+              className="text-xs"
+              style={{ color: COLORS.textMuted, fontFamily: 'JetBrains Mono, monospace' }}
+            >
+              平均负载
+            </span>
+          </div>
+          <div
+            className="text-2xl font-bold"
+            style={{
+              color: getScoreColor(avgUtilization, 100),
+              fontFamily: 'JetBrains Mono, monospace',
+            }}
+          >
+            {formatPercent(avgUtilization, 0)}
           </div>
         </div>
       </div>
@@ -137,7 +180,7 @@ export const KPIDashboard = () => {
           className="text-right text-xs mt-1"
           style={{ color: COLORS.textMuted, fontFamily: 'JetBrains Mono, monospace' }}
         >
-          {metrics.congestionIndex.toFixed(0)}%
+          {formatPercent(metrics.congestionIndex, 0)}
         </div>
       </div>
 
@@ -146,11 +189,13 @@ export const KPIDashboard = () => {
           className="text-xs font-bold mb-3"
           style={{ color: COLORS.textMuted, fontFamily: 'JetBrains Mono, monospace' }}
         >
-          电梯利用率
+          电梯状态
         </h4>
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {elevators.map((elevator) => {
             const utilization = (elevator.passengers / elevator.capacity) * 100;
+            const isMoving = elevator.state === 'moving';
+            const isDoorOpen = elevator.state === 'door-open';
             return (
               <div key={elevator.id} className="flex items-center gap-2">
                 <span
@@ -161,6 +206,23 @@ export const KPIDashboard = () => {
                   }}
                 >
                   E{elevator.id + 1}
+                </span>
+                <span
+                  className="w-6 text-[10px] text-center"
+                  style={{
+                    color: isMoving ? COLORS.primary : isDoorOpen ? COLORS.success : COLORS.textMuted,
+                    fontFamily: 'JetBrains Mono, monospace',
+                  }}
+                >
+                  {formatInt(elevator.currentFloor)}
+                </span>
+                <span
+                  className="w-4 text-[10px]"
+                  style={{
+                    color: elevator.direction === 'up' ? COLORS.primary : elevator.direction === 'down' ? COLORS.secondary : COLORS.textMuted,
+                  }}
+                >
+                  {elevator.direction === 'up' ? '↑' : elevator.direction === 'down' ? '↓' : '○'}
                 </span>
                 <div
                   className="flex-1 h-2 rounded-full overflow-hidden"
@@ -175,13 +237,13 @@ export const KPIDashboard = () => {
                   />
                 </div>
                 <span
-                  className="w-10 text-right text-[10px]"
+                  className="w-12 text-right text-[10px]"
                   style={{
                     color: COLORS.textMuted,
                     fontFamily: 'JetBrains Mono, monospace',
                   }}
                 >
-                  {utilization.toFixed(0)}%
+                  {elevator.passengers}/{elevator.capacity}
                 </span>
               </div>
             );
@@ -195,7 +257,7 @@ export const KPIDashboard = () => {
             className="text-xs font-bold mb-3"
             style={{ color: COLORS.textMuted, fontFamily: 'JetBrains Mono, monospace' }}
           >
-            等待时间趋势
+            等待时间趋势 (秒)
           </h4>
           <ResponsiveContainer width="100%" height={120}>
             <AreaChart data={chartData}>
@@ -210,7 +272,11 @@ export const KPIDashboard = () => {
                 hide
                 tick={{ fill: COLORS.textMuted, fontSize: 10 }}
               />
-              <YAxis hide tick={{ fill: COLORS.textMuted, fontSize: 10 }} />
+              <YAxis
+                hide
+                tick={{ fill: COLORS.textMuted, fontSize: 10 }}
+                domain={['auto', 'auto']}
+              />
               <Tooltip
                 contentStyle={{
                   backgroundColor: COLORS.dark,
@@ -220,6 +286,7 @@ export const KPIDashboard = () => {
                   fontSize: '12px',
                 }}
                 labelStyle={{ color: COLORS.text }}
+                formatter={(value: number) => [`${value.toFixed(1)}s`, '等待时间']}
               />
               <Area
                 type="monotone"
@@ -227,7 +294,48 @@ export const KPIDashboard = () => {
                 stroke={COLORS.primary}
                 fillOpacity={1}
                 fill="url(#colorWait)"
-                name="等待时间(s)"
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {chartData.length > 2 && (
+        <div className="p-4 rounded-xl" style={{ backgroundColor: COLORS.darkLight }}>
+          <h4
+            className="text-xs font-bold mb-3"
+            style={{ color: COLORS.textMuted, fontFamily: 'JetBrains Mono, monospace' }}
+          >
+            吞吐量趋势
+          </h4>
+          <ResponsiveContainer width="100%" height={100}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="colorThroughput" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={COLORS.success} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={COLORS.success} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="time" hide />
+              <YAxis hide />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: COLORS.dark,
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: '8px',
+                  fontFamily: 'JetBrains Mono, monospace',
+                  fontSize: '12px',
+                }}
+                formatter={(value: number) => [formatInt(value), '完成数']}
+              />
+              <Area
+                type="monotone"
+                dataKey="throughput"
+                stroke={COLORS.success}
+                fillOpacity={1}
+                fill="url(#colorThroughput)"
+                isAnimationActive={false}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -247,7 +355,7 @@ export const KPIDashboard = () => {
               className="text-xl font-bold"
               style={{ color: COLORS.text, fontFamily: 'JetBrains Mono, monospace' }}
             >
-              {totalCallsReceived}
+              {formatInt(totalCallsReceived)}
             </div>
           </div>
           <div>
@@ -259,12 +367,12 @@ export const KPIDashboard = () => {
             </div>
             <div
               className="text-xl font-bold"
-              style={{ color: COLORS.success, fontFamily: 'JetBrains Mono, monospace' }}
+              style={{
+                color: getScoreColor(completionRate, 100, true),
+                fontFamily: 'JetBrains Mono, monospace',
+              }}
             >
-              {totalCallsReceived > 0
-                ? ((totalCallsCompleted / totalCallsReceived) * 100).toFixed(1)
-                : 0}
-              %
+              {formatPercent(completionRate, 1)}
             </div>
           </div>
         </div>
