@@ -11,7 +11,13 @@
   const saveBtn = document.getElementById('saveBtn');
 
   const HANDLE_SIZE = 8;
-  const SNAP_HINT_RADIUS = 18;
+
+  const DragState = {
+    IDLE: 'idle',
+    HANDLE_ACTIVE: 'handle_active',
+    BOX_TRANSLATE: 'box_translate',
+    REBOUND_ANIM: 'rebound_anim'
+  };
 
   const state = {
     image: null,
@@ -21,12 +27,20 @@
     boxes: [],
     originalBoxes: [],
     selectedBoxId: null,
-    dragging: null,
-    mouseX: 0,
-    mouseY: 0,
-    hoverHandle: null,
-    previewSnap: null
+    dragState: DragState.IDLE,
+    dragPayload: null,
+    previewSnap: null,
+    animFrame: null,
+    statusMessage: ''
   };
+
+  function getDragOptions() {
+    return {
+      snapEnabled: snapToggle.checked,
+      searchRadius: parseInt(snapRadiusInput.value, 10) || 30,
+      threshold: parseInt(snapThresholdInput.value, 10) || 35
+    };
+  }
 
   function loadSample() {
     fetch('/api/sample')
@@ -75,69 +89,113 @@
     return null;
   }
 
-  function findHandleAt(px, py) {
+  function hitTestHandle(px, py) {
     for (let i = state.boxes.length - 1; i >= 0; i--) {
       const box = state.boxes[i];
       for (const h of ['tl', 'tr', 'bl', 'br']) {
         const p = getHandlePosition(box, h);
         if (Math.abs(px - p.x) <= HANDLE_SIZE && Math.abs(py - p.y) <= HANDLE_SIZE) {
-          return { boxId: box.id, handle: h, isBox: false };
+          return { type: 'handle', boxId: box.id, handle: h, boxIndex: i };
         }
-      }
-      if (px >= box.x && px <= box.x + box.w && py >= box.y && py <= box.y + box.h) {
-        return { boxId: box.id, handle: null, isBox: true, offsetX: px - box.x, offsetY: py - box.y };
       }
     }
     return null;
   }
 
-  function computeSnapForHandle(box, handle, targetX, targetY) {
-    if (!snapToggle.checked) return null;
-    if (!state.imageData) return null;
-    const radius = parseInt(snapRadiusInput.value, 10) || 30;
-    const threshold = parseInt(snapThresholdInput.value, 10) || 35;
+  function hitTestBoxBody(px, py) {
+    for (let i = state.boxes.length - 1; i >= 0; i--) {
+      const box = state.boxes[i];
+      if (px >= box.x && px <= box.x + box.w && py >= box.y && py <= box.y + box.h) {
+        return {
+          type: 'body',
+          boxId: box.id,
+          boxIndex: i,
+          offsetX: px - box.x,
+          offsetY: py - box.y
+        };
+      }
+    }
+    return null;
+  }
 
-    const result = SNAP.snapCorner(state.imageData, targetX, targetY, box, {
-      searchRadius: radius,
-      threshold
+  function applyHandleTransform(box, handle, targetX, targetY) {
+    let { x, y, w, h } = box;
+    switch (handle) {
+      case 'tl':
+        w = x + w - targetX;
+        h = y + h - targetY;
+        x = targetX;
+        break;
+      case 'tr':
+        h = y + h - targetY;
+        y = targetY;
+        w = targetX - x;
+        break;
+      case 'bl':
+        w = x + w - targetX;
+        x = targetX;
+        h = targetY - y;
+        break;
+      case 'br':
+        w = targetX - x;
+        h = targetY - y;
+        break;
+    }
+    if (w < 10) w = 10;
+    if (h < 10) h = 10;
+    return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+  }
+
+  function computeSnapForHandle(box, handle, pointerX, pointerY) {
+    const opts = getDragOptions();
+    if (!opts.snapEnabled) return null;
+    if (!state.imageData) return null;
+
+    const result = SNAP.snapCorner(state.imageData, pointerX, pointerY, box, {
+      searchRadius: opts.searchRadius,
+      threshold: opts.threshold,
+      enforceBoundary: true
     });
+
     return result.snapped ? result : null;
   }
 
-  function applyHandleDrag(box, handle, newX, newY, snap) {
-    let { x, y, w, h } = box;
-    if (snap) {
-      newX = snap.x;
-      newY = snap.y;
+  function validateAndEnforceBoundary(box, originalBox) {
+    if (!state.imageData) return { valid: true, box };
+    return SNAP.validateBoxPosition(state.imageData, box, originalBox);
+  }
+
+  function animateRebound(fromBox, toBox, callback) {
+    state.dragState = DragState.REBOUND_ANIM;
+    const duration = 220;
+    const startTime = performance.now();
+
+    function tick(t) {
+      const elapsed = t - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      const ease = 1 - Math.pow(1 - progress, 3);
+
+      const box = getBoxById(fromBox.id);
+      if (box) {
+        box.x = Math.round(fromBox.x + (toBox.x - fromBox.x) * ease);
+        box.y = Math.round(fromBox.y + (toBox.y - fromBox.y) * ease);
+        box.w = Math.round(fromBox.w + (toBox.w - fromBox.w) * ease);
+        box.h = Math.round(fromBox.h + (toBox.h - fromBox.h) * ease);
+      }
+      render();
+
+      if (progress < 1) {
+        state.animFrame = requestAnimationFrame(tick);
+      } else {
+        state.dragState = DragState.IDLE;
+        state.dragPayload = null;
+        state.statusMessage = '';
+        if (callback) callback();
+        render();
+        renderList();
+      }
     }
-    switch (handle) {
-      case 'tl':
-        w = x + w - newX;
-        h = y + h - newY;
-        x = newX;
-        y = newY;
-        break;
-      case 'tr':
-        h = y + h - newY;
-        y = newY;
-        w = newX - x;
-        break;
-      case 'bl':
-        w = x + w - newX;
-        x = newX;
-        h = newY - y;
-        break;
-      case 'br':
-        w = newX - x;
-        h = newY - y;
-        break;
-    }
-    if (w < 5) w = 5;
-    if (h < 5) h = 5;
-    box.x = Math.round(x);
-    box.y = Math.round(y);
-    box.w = Math.round(w);
-    box.h = Math.round(h);
+    state.animFrame = requestAnimationFrame(tick);
   }
 
   function render() {
@@ -148,6 +206,7 @@
 
     for (const box of state.boxes) {
       const isSelected = box.id === state.selectedBoxId;
+
       ctx.lineWidth = isSelected ? 2 : 1.5;
       ctx.strokeStyle = isSelected ? '#e74c3c' : '#3498db';
       ctx.fillStyle = isSelected ? 'rgba(231,76,60,0.08)' : 'rgba(52,152,219,0.06)';
@@ -168,19 +227,32 @@
       }
     }
 
-    if (state.previewSnap && state.dragging) {
-      ctx.strokeStyle = '#2ecc71';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.moveTo(state.dragging.startX, state.dragging.startY);
-      ctx.lineTo(state.previewSnap.x, state.previewSnap.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = '#2ecc71';
-      ctx.beginPath();
-      ctx.arc(state.previewSnap.x, state.previewSnap.y, 4, 0, Math.PI * 2);
-      ctx.fill();
+    if (state.previewSnap && (state.dragState === DragState.HANDLE_ACTIVE)) {
+      const payload = state.dragPayload;
+      if (payload && payload.pointerStartX != null) {
+        ctx.strokeStyle = state.previewSnap.boundaryFallback ? '#f39c12' : '#2ecc71';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(payload.pointerStartX, payload.pointerStartY);
+        ctx.lineTo(state.previewSnap.x, state.previewSnap.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = state.previewSnap.boundaryFallback ? '#f39c12' : '#2ecc71';
+        ctx.beginPath();
+        ctx.arc(state.previewSnap.x, state.previewSnap.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (state.statusMessage) {
+      ctx.fillStyle = 'rgba(231,76,60,0.9)';
+      ctx.fillRect(stage.width / 2 - 160, 10, 320, 32);
+      ctx.fillStyle = '#fff';
+      ctx.font = '13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(state.statusMessage, stage.width / 2, 31);
+      ctx.textAlign = 'left';
     }
   }
 
@@ -224,70 +296,211 @@
     };
   }
 
+  function updateCursor(px, py) {
+    const handleHit = hitTestHandle(px, py);
+    if (handleHit) {
+      stage.style.cursor = handleHit.handle === 'tl' || handleHit.handle === 'br' ? 'nwse-resize' : 'nesw-resize';
+      return;
+    }
+    const bodyHit = hitTestBoxBody(px, py);
+    if (bodyHit) {
+      stage.style.cursor = 'move';
+      return;
+    }
+    stage.style.cursor = 'default';
+  }
+
   stage.addEventListener('mousedown', (e) => {
+    if (state.dragState !== DragState.IDLE) return;
+
     const pos = getMousePos(e);
-    const hit = findHandleAt(pos.x, pos.y);
-    if (!hit) return;
-    state.selectedBoxId = hit.boxId;
-    const box = getBoxById(hit.boxId);
-    state.dragging = {
-      boxId: hit.boxId,
-      handle: hit.handle,
-      isBox: hit.isBox,
-      offsetX: hit.offsetX,
-      offsetY: hit.offsetY,
-      startX: pos.x,
-      startY: pos.y,
-      startBox: { x: box.x, y: box.y, w: box.w, h: box.h }
-    };
-    render();
-    renderList();
+
+    const handleHit = hitTestHandle(pos.x, pos.y);
+    if (handleHit) {
+      state.selectedBoxId = handleHit.boxId;
+      const box = getBoxById(handleHit.boxId);
+      const handlePos = getHandlePosition(box, handleHit.handle);
+
+      state.dragState = DragState.HANDLE_ACTIVE;
+      state.dragPayload = {
+        boxId: handleHit.boxId,
+        handle: handleHit.handle,
+        handleStartX: handlePos.x,
+        handleStartY: handlePos.y,
+        pointerStartX: pos.x,
+        pointerStartY: pos.y,
+        boxStart: { x: box.x, y: box.y, w: box.w, h: box.h, id: box.id, text: box.text }
+      };
+      render();
+      renderList();
+      return;
+    }
+
+    const bodyHit = hitTestBoxBody(pos.x, pos.y);
+    if (bodyHit) {
+      state.selectedBoxId = bodyHit.boxId;
+      const box = getBoxById(bodyHit.boxId);
+
+      state.dragState = DragState.BOX_TRANSLATE;
+      state.dragPayload = {
+        boxId: bodyHit.boxId,
+        offsetX: bodyHit.offsetX,
+        offsetY: bodyHit.offsetY,
+        boxStart: { x: box.x, y: box.y, w: box.w, h: box.h, id: box.id, text: box.text }
+      };
+      render();
+      renderList();
+      return;
+    }
   });
 
   stage.addEventListener('mousemove', (e) => {
     const pos = getMousePos(e);
-    state.mouseX = pos.x;
-    state.mouseY = pos.y;
 
-    if (!state.dragging) {
-      const hit = findHandleAt(pos.x, pos.y);
-      if (hit && hit.handle) {
-        stage.style.cursor = hit.handle === 'tl' || hit.handle === 'br' ? 'nwse-resize' : 'nesw-resize';
-      } else if (hit && hit.isBox) {
-        stage.style.cursor = 'move';
-      } else {
-        stage.style.cursor = 'default';
-      }
+    if (state.dragState === DragState.IDLE) {
+      updateCursor(pos.x, pos.y);
       return;
     }
 
-    const box = getBoxById(state.dragging.boxId);
-    if (state.dragging.isBox) {
-      box.x = Math.round(pos.x - state.dragging.offsetX);
-      box.y = Math.round(pos.y - state.dragging.offsetY);
-      state.previewSnap = null;
-    } else {
-      state.previewSnap = computeSnapForHandle(box, state.dragging.handle, pos.x, pos.y);
-      applyHandleDrag(box, state.dragging.handle, pos.x, pos.y, state.previewSnap);
+    if (state.dragState === DragState.HANDLE_ACTIVE) {
+      const payload = state.dragPayload;
+      const box = getBoxById(payload.boxId);
+
+      const snap = computeSnapForHandle(payload.boxStart, payload.handle, pos.x, pos.y);
+      state.previewSnap = snap;
+
+      const useX = snap ? snap.x : pos.x;
+      const useY = snap ? snap.y : pos.y;
+
+      const newGeom = applyHandleTransform(payload.boxStart, payload.handle, useX, useY);
+      box.x = newGeom.x;
+      box.y = newGeom.y;
+      box.w = newGeom.w;
+      box.h = newGeom.h;
+
+      render();
+      return;
     }
-    render();
+
+    if (state.dragState === DragState.BOX_TRANSLATE) {
+      const payload = state.dragPayload;
+      const box = getBoxById(payload.boxId);
+
+      const newX = Math.round(pos.x - payload.offsetX);
+      const newY = Math.round(pos.y - payload.offsetY);
+
+      const proposedBox = { ...box, x: newX, y: newY };
+      const validation = validateAndEnforceBoundary(proposedBox, payload.boxStart);
+
+      if (validation.valid) {
+        box.x = newX;
+        box.y = newY;
+        state.statusMessage = '';
+      } else if (validation.rebound) {
+        box.x = newX;
+        box.y = newY;
+        state.statusMessage = '⚠ 警告：接近空白区域';
+      } else {
+        state.statusMessage = '⚠ 已拦截：禁止拖入纯白区域';
+      }
+      state.previewSnap = null;
+      render();
+    }
   });
 
   window.addEventListener('mouseup', () => {
-    if (state.dragging) {
-      state.dragging = null;
-      state.previewSnap = null;
+    if (state.dragState === DragState.HANDLE_ACTIVE) {
+      const payload = state.dragPayload;
+      const box = getBoxById(payload.boxId);
+
+      const finalGeom = {
+        x: box.x, y: box.y, w: box.w, h: box.h, id: box.id, text: box.text
+      };
+
+      const validation = validateAndEnforceBoundary(finalGeom, payload.boxStart);
+
+      if (!validation.valid) {
+        if (validation.rebound) {
+          state.statusMessage = '⟲ 正在回弹至最近文字边界...';
+          animateRebound(finalGeom, validation.box, () => {
+            state.statusMessage = '';
+          });
+        } else {
+          state.statusMessage = '✗ 拦截：无文字像素，已恢复原位';
+          box.x = payload.boxStart.x;
+          box.y = payload.boxStart.y;
+          box.w = payload.boxStart.w;
+          box.h = payload.boxStart.h;
+          setTimeout(() => {
+            state.statusMessage = '';
+            render();
+          }, 1200);
+        }
+      }
+
+      if (state.dragState !== DragState.REBOUND_ANIM) {
+        state.dragState = DragState.IDLE;
+        state.dragPayload = null;
+        state.previewSnap = null;
+      }
+      render();
+      renderList();
+      return;
+    }
+
+    if (state.dragState === DragState.BOX_TRANSLATE) {
+      const payload = state.dragPayload;
+      const box = getBoxById(payload.boxId);
+
+      const finalBox = {
+        x: box.x, y: box.y, w: box.w, h: box.h, id: box.id, text: box.text
+      };
+
+      const validation = validateAndEnforceBoundary(finalBox, payload.boxStart);
+
+      if (!validation.valid) {
+        if (validation.rebound) {
+          state.statusMessage = '⟲ 正在回弹至最近文字边界...';
+          animateRebound(finalBox, validation.box, () => {
+            state.statusMessage = '';
+          });
+        } else {
+          state.statusMessage = '✗ 拦截：无文字像素，已恢复原位';
+          box.x = payload.boxStart.x;
+          box.y = payload.boxStart.y;
+          box.w = payload.boxStart.w;
+          box.h = payload.boxStart.h;
+          setTimeout(() => {
+            state.statusMessage = '';
+            render();
+          }, 1200);
+        }
+      }
+
+      if (state.dragState !== DragState.REBOUND_ANIM) {
+        state.dragState = DragState.IDLE;
+        state.dragPayload = null;
+        state.previewSnap = null;
+      }
       render();
       renderList();
     }
   });
 
   stage.addEventListener('mouseleave', () => {
-    state.previewSnap = null;
+    if (state.dragState === DragState.IDLE) {
+      state.previewSnap = null;
+      render();
+    }
   });
 
   resetBtn.addEventListener('click', () => {
+    if (state.animFrame) cancelAnimationFrame(state.animFrame);
     state.boxes = state.originalBoxes.map(b => ({ ...b }));
+    state.dragState = DragState.IDLE;
+    state.dragPayload = null;
+    state.previewSnap = null;
+    state.statusMessage = '';
     render();
     renderList();
   });
