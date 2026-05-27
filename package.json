@@ -1,0 +1,13 @@
+{
+  "name": "billiards-physics-game",
+  "version": "1.0.0",
+  "description": "Full-stack billiards game with custom physics engine",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

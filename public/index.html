@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台球物理引擎 - Billiards Physics Engine</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #fff;
+    }
+
+    .container {
+      text-align: center;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+      font-size: 28px;
+      background: linear-gradient(90deg, #ffd700, #ffaa00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      margin-bottom: 20px;
+      color: #888;
+      font-size: 14px;
+    }
+
+    #gameCanvas {
+      border: 3px solid #333;
+      border-radius: 8px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      background: #000;
+    }
+
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 12px 24px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 600;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #4CAF50, #45a049);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(76, 175, 80, 0.4);
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, #2196F3, #1976D2);
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(33, 150, 243, 0.4);
+    }
+
+    .instructions {
+      margin-top: 20px;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      max-width: 600px;
+    }
+
+    .instructions h3 {
+      margin-bottom: 10px;
+      color: #ffd700;
+    }
+
+    .instructions p {
+      color: #aaa;
+      font-size: 13px;
+      line-height: 1.6;
+      text-align: left;
+    }
+
+    .status {
+      margin-top: 15px;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+      font-size: 12px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎱 台球物理引擎</h1>
+    <p class="subtitle">手写连续碰撞检测 | 动量传递 | 摩擦力衰减</p>
+    
+    <canvas id="gameCanvas" width="900" height="500"></canvas>
+    
+    <div class="controls">
+      <button class="btn-primary" id="resetBtn">🔄 重新开球</button>
+      <button class="btn-secondary" id="autoBreakBtn">⚡ 自动开球</button>
+    </div>
+    
+    <div class="instructions">
+      <h3>操作说明</h3>
+      <p>
+        🖱️ <strong>鼠标点击</strong>白球并拖动：瞄准方向<br>
+        🎯 <strong>拖动距离</strong>：控制击球力度<br>
+        🖱️ <strong>松开鼠标</strong>：击球<br>
+        🔄 <strong>重新开球</strong>：重置所有球的位置<br>
+        ⚡ <strong>自动开球</strong>：自动进行一次开球
+      </p>
+    </div>
+    
+    <div class="status">
+      物理引擎: 自定义CCD | 渲染: Canvas 2D | 架构: MVC分离
+    </div>
+  </div>
+
+  <script src="physics.js"></script>
+  <script src="renderer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
