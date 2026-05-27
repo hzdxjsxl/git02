@@ -1,0 +1,12 @@
+{
+  "name": "logic-circuit-simulator",
+  "version": "1.0.0",
+  "description": "Web-based digital logic circuit simulator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

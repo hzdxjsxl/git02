@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数字逻辑电路模拟器</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>数字逻辑电路模拟器</h1>
+      <div class="status-bar">
+        <span>状态: <span id="status" class="status-text">Stopped</span></span>
+        <span>滴答计数: <span id="tickCount">0</span></span>
+        <span>滴答速率: <span id="tickRate">100</span>ms</span>
+      </div>
+    </header>
+
+    <main>
+      <div class="canvas-container">
+        <canvas id="circuitCanvas"></canvas>
+      </div>
+
+      <aside class="controls">
+        <h2>控制面板</h2>
+        
+        <div class="control-group">
+          <h3>仿真控制</h3>
+          <div class="button-row">
+            <button id="startBtn" class="btn btn-primary">开始</button>
+            <button id="stopBtn" class="btn btn-danger">停止</button>
+            <button id="stepBtn" class="btn btn-secondary">单步</button>
+            <button id="resetBtn" class="btn btn-secondary">重置</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <h3>时钟速率</h3>
+          <div class="button-row">
+            <button id="fasterBtn" class="btn btn-secondary">加速</button>
+            <button id="slowerBtn" class="btn btn-secondary">减速</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <h3>操作说明</h3>
+          <ul class="instructions">
+            <li>点击 INPUT 门切换输入值 (0/1)</li>
+            <li>绿色表示高电平 (1)</li>
+            <li>灰色表示低电平 (0)</li>
+            <li>连线颜色随信号变化</li>
+          </ul>
+        </div>
+
+        <div class="control-group">
+          <h3>支持的门电路</h3>
+          <ul class="gate-list">
+            <li><strong>INPUT</strong> - 输入源</li>
+            <li><strong>OUTPUT</strong> - 输出显示</li>
+            <li><strong>AND</strong> - 与门</li>
+            <li><strong>OR</strong> - 或门</li>
+            <li><strong>NOT</strong> - 非门</li>
+            <li><strong>NAND</strong> - 与非门</li>
+            <li><strong>NOR</strong> - 或非门</li>
+            <li><strong>XOR</strong> - 异或门</li>
+          </ul>
+        </div>
+      </aside>
+    </main>
+
+    <footer>
+      <p>数字逻辑电路模拟器 - DAG 构建与信号流转</p>
+    </footer>
+  </div>
+
+  <script src="js/logic-engine.js"></script>
+  <script src="js/circuit-view.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
