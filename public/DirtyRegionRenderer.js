@@ -3,247 +3,183 @@ class DirtyRegionRenderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.cellSize = cellSize;
-    this.dirtyRegions = [];
-    this.viewport = { x: 0, y: 0, width: 0, height: 0 };
     this.data = null;
     this.dataWidth = 0;
     this.dataHeight = 0;
-    this.isRendering = false;
-    this.pendingRender = null;
-    
-    this.offscreenCanvas = document.createElement('canvas');
-    this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+
+    this.viewport = { x: 0, y: 0, width: 0, height: 0 };
+
+    this._rafId = null;
+    this._needsRender = false;
+    this._lastRenderTime = 0;
+    this._minRenderInterval = 16;
+
+    this._offscreen = document.createElement('canvas');
+    this._offCtx = this._offscreen.getContext('2d');
+
+    this._lastVisibleRange = null;
   }
 
   setData(data, width, height) {
     this.data = data;
     this.dataWidth = width;
     this.dataHeight = height;
-    this.markAllDirty();
+    this._lastVisibleRange = null;
+    this.requestRender();
   }
 
   setViewport(x, y, width, height) {
-    const oldViewport = { ...this.viewport };
-    this.viewport = { x, y, width, height };
-    
-    if (oldViewport.x !== x || oldViewport.y !== y || 
-        oldViewport.width !== width || oldViewport.height !== height) {
-      this.markViewportDirty();
-      this.scheduleRender();
+    if (this.viewport.x === x && this.viewport.y === y &&
+        this.viewport.width === width && this.viewport.height === height) {
+      return;
     }
+    this.viewport.x = x;
+    this.viewport.y = y;
+    this.viewport.width = width;
+    this.viewport.height = height;
+    this.requestRender();
   }
 
   setCellSize(size) {
+    if (this.cellSize === size) return;
     this.cellSize = size;
-    this.markAllDirty();
-    this.scheduleRender();
+    this._lastVisibleRange = null;
+    this.requestRender();
   }
 
-  markAllDirty() {
-    this.dirtyRegions = [{
-      x: 0,
-      y: 0,
-      width: this.dataWidth,
-      height: this.dataHeight
-    }];
-  }
+  requestRender() {
+    this._needsRender = true;
+    if (this._rafId !== null) return;
 
-  markViewportDirty() {
-    const cellX = Math.floor(this.viewport.x / this.cellSize);
-    const cellY = Math.floor(this.viewport.y / this.cellSize);
-    const cellWidth = Math.ceil(this.viewport.width / this.cellSize) + 2;
-    const cellHeight = Math.ceil(this.viewport.height / this.cellSize) + 2;
-    
-    this.dirtyRegions.push({
-      x: Math.max(0, cellX - 1),
-      y: Math.max(0, cellY - 1),
-      width: Math.min(cellWidth, this.dataWidth - cellX + 2),
-      height: Math.min(cellHeight, this.dataHeight - cellY + 2)
+    this._rafId = requestAnimationFrame(() => {
+      this._rafId = null;
+      const now = performance.now();
+      const elapsed = now - this._lastRenderTime;
+
+      if (elapsed < this._minRenderInterval) {
+        if (this._needsRender) {
+          this._rafId = requestAnimationFrame(() => this._doRender());
+        }
+        return;
+      }
+
+      this._doRender();
     });
   }
 
-  markRegionDirty(x, y, width, height) {
-    this.dirtyRegions.push({ x, y, width, height });
-  }
+  _doRender() {
+    if (!this._needsRender) return;
+    this._needsRender = false;
+    this._lastRenderTime = performance.now();
 
-  mergeDirtyRegions() {
-    if (this.dirtyRegions.length === 0) return [];
-    if (this.dirtyRegions.length === 1) return this.dirtyRegions;
+    if (!this.data || this.viewport.width <= 0 || this.viewport.height <= 0) return;
 
-    const merged = [...this.dirtyRegions];
-    let changed = true;
-    
-    while (changed) {
-      changed = false;
-      for (let i = 0; i < merged.length; i++) {
-        for (let j = i + 1; j < merged.length; j++) {
-          const r1 = merged[i];
-          const r2 = merged[j];
-          
-          if (this.regionsOverlapOrAdjacent(r1, r2)) {
-            merged[i] = this.mergeTwoRegions(r1, r2);
-            merged.splice(j, 1);
-            changed = true;
-            j--;
-          }
-        }
-      }
-    }
-    
-    return merged;
-  }
+    const range = this._computeVisibleRange();
+    if (!range) return;
 
-  regionsOverlapOrAdjacent(r1, r2) {
-    const tolerance = 50;
-    return !(r1.x + r1.width + tolerance < r2.x ||
-             r2.x + r2.width + tolerance < r1.x ||
-             r1.y + r1.height + tolerance < r2.y ||
-             r2.y + r2.height + tolerance < r1.y);
-  }
-
-  mergeTwoRegions(r1, r2) {
-    const x = Math.min(r1.x, r2.x);
-    const y = Math.min(r1.y, r2.y);
-    const width = Math.max(r1.x + r1.width, r2.x + r2.width) - x;
-    const height = Math.max(r1.y + r1.height, r2.y + r2.height) - y;
-    return { x, y, width, height };
-  }
-
-  clipRegionToViewport(region) {
-    const cellX = Math.floor(this.viewport.x / this.cellSize);
-    const cellY = Math.floor(this.viewport.y / this.cellSize);
-    const cellWidth = Math.ceil(this.viewport.width / this.cellSize) + 1;
-    const cellHeight = Math.ceil(this.viewport.height / this.cellSize) + 1;
-    
-    const viewportRegion = {
-      x: Math.max(0, cellX),
-      y: Math.max(0, cellY),
-      width: Math.min(cellWidth, this.dataWidth - cellX),
-      height: Math.min(cellHeight, this.dataHeight - cellY)
-    };
-    
-    const x = Math.max(region.x, viewportRegion.x);
-    const y = Math.max(region.y, viewportRegion.y);
-    const width = Math.min(region.x + region.width, viewportRegion.x + viewportRegion.width) - x;
-    const height = Math.min(region.y + region.height, viewportRegion.y + viewportRegion.height) - y;
-    
-    if (width <= 0 || height <= 0) return null;
-    
-    return { x, y, width, height };
-  }
-
-  scheduleRender() {
-    if (this.isRendering) {
-      this.pendingRender = true;
+    if (this._lastVisibleRange &&
+        this._lastVisibleRange.startX === range.startX &&
+        this._lastVisibleRange.startY === range.startY &&
+        this._lastVisibleRange.endX === range.endX &&
+        this._lastVisibleRange.endY === range.endY &&
+        this._lastVisibleRange.cellSize === this.cellSize) {
       return;
     }
-    
-    requestAnimationFrame(() => this.render());
+
+    this._lastVisibleRange = { ...range, cellSize: this.cellSize };
+    this._renderRange(range);
   }
 
-  async render() {
-    if (!this.data || this.dirtyRegions.length === 0) {
-      this.isRendering = false;
-      return;
-    }
-    
-    this.isRendering = true;
-    
-    const mergedRegions = this.mergeDirtyRegions();
-    this.dirtyRegions = [];
-    
-    for (const region of mergedRegions) {
-      const clipped = this.clipRegionToViewport(region);
-      if (!clipped) continue;
-      
-      await this.renderRegion(clipped);
-      
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
-    
-    this.isRendering = false;
-    
-    if (this.pendingRender) {
-      this.pendingRender = false;
-      this.scheduleRender();
-    }
+  _computeVisibleRange() {
+    const cs = this.cellSize;
+    const vx = this.viewport.x;
+    const vy = this.viewport.y;
+    const vw = this.viewport.width;
+    const vh = this.viewport.height;
+
+    let startX = Math.floor(vx / cs);
+    let startY = Math.floor(vy / cs);
+    let endX = Math.ceil((vx + vw) / cs);
+    let endY = Math.ceil((vy + vh) / cs);
+
+    startX = Math.max(0, startX);
+    startY = Math.max(0, startY);
+    endX = Math.min(this.dataWidth, endX);
+    endY = Math.min(this.dataHeight, endY);
+
+    if (startX >= endX || startY >= endY) return null;
+
+    return { startX, startY, endX, endY };
   }
 
-  async renderRegion(region) {
-    const { x, y, width, height } = region;
-    
-    if (width <= 0 || height <= 0) return;
-    
-    const pixelX = x * this.cellSize - this.viewport.x;
-    const pixelY = y * this.cellSize - this.viewport.y;
-    const pixelWidth = width * this.cellSize;
-    const pixelHeight = height * this.cellSize;
-    
-    this.offscreenCanvas.width = pixelWidth;
-    this.offscreenCanvas.height = pixelHeight;
-    
-    const imageData = this.offscreenCtx.createImageData(pixelWidth, pixelHeight);
-    const data = imageData.data;
-    
-    const cellSize = this.cellSize;
-    
-    for (let row = 0; row < height; row++) {
-      const dataRow = y + row;
-      if (dataRow >= this.dataHeight) break;
-      
-      const rowData = this.data[dataRow];
+  _renderRange(range) {
+    const { startX, startY, endX, endY } = range;
+    const cs = this.cellSize;
+    const vx = this.viewport.x;
+    const vy = this.viewport.y;
+
+    const pxX = startX * cs - vx;
+    const pxY = startY * cs - vy;
+    const pxW = (endX - startX) * cs;
+    const pxH = (endY - startY) * cs;
+
+    this._offscreen.width = pxW;
+    this._offscreen.height = pxH;
+
+    const imgData = this._offCtx.createImageData(pxW, pxH);
+    const buf = imgData.data;
+
+    for (let row = startY; row < endY; row++) {
+      const rowData = this.data[row];
       if (!rowData) continue;
-      
-      for (let col = 0; col < width; col++) {
-        const dataCol = x + col;
-        if (dataCol >= this.dataWidth) break;
-        
-        const isWhite = rowData[dataCol] === '1';
+
+      const localRow = row - startY;
+      const baseRow = localRow * cs;
+
+      for (let col = startX; col < endX; col++) {
+        const isWhite = rowData[col] === '1';
         const r = isWhite ? 255 : 30;
         const g = isWhite ? 255 : 30;
         const b = isWhite ? 255 : 30;
-        
-        for (let py = 0; py < cellSize; py++) {
-          for (let px = 0; px < cellSize; px++) {
-            const pixelRow = row * cellSize + py;
-            const pixelCol = col * cellSize + px;
-            
-            if (pixelRow >= pixelHeight || pixelCol >= pixelWidth) continue;
-            
-            const idx = (pixelRow * pixelWidth + pixelCol) * 4;
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
+
+        const localCol = col - startX;
+        const baseCol = localCol * cs;
+
+        for (let py = 0; py < cs; py++) {
+          const pixelRow = baseRow + py;
+          if (pixelRow >= pxH) break;
+
+          const rowOffset = pixelRow * pxW * 4;
+          for (let px = 0; px < cs; px++) {
+            const pixelCol = baseCol + px;
+            if (pixelCol >= pxW) break;
+
+            const idx = rowOffset + pixelCol * 4;
+            buf[idx] = r;
+            buf[idx + 1] = g;
+            buf[idx + 2] = b;
+            buf[idx + 3] = 255;
           }
         }
       }
-      
-      if (row % 50 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
     }
-    
-    this.offscreenCtx.putImageData(imageData, 0, 0);
-    this.ctx.drawImage(this.offscreenCanvas, pixelX, pixelY);
+
+    this._offCtx.putImageData(imgData, 0, 0);
+
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.drawImage(this._offscreen, pxX, pxY);
   }
 
   getVisibleCellRange() {
-    const startX = Math.floor(this.viewport.x / this.cellSize);
-    const startY = Math.floor(this.viewport.y / this.cellSize);
-    const endX = Math.ceil((this.viewport.x + this.viewport.width) / this.cellSize);
-    const endY = Math.ceil((this.viewport.y + this.viewport.height) / this.cellSize);
-    
-    return {
-      startX: Math.max(0, startX),
-      startY: Math.max(0, startY),
-      endX: Math.min(this.dataWidth, endX),
-      endY: Math.min(this.dataHeight, endY)
-    };
+    return this._computeVisibleRange() || { startX: 0, startY: 0, endX: 0, endY: 0 };
   }
 
   destroy() {
-    this.dirtyRegions = [];
+    if (this._rafId !== null) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
+    this._needsRender = false;
     this.data = null;
   }
 }
