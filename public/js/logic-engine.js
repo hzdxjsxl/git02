@@ -67,7 +67,7 @@ class LogicEngine {
 
       temp.delete(gateId);
       visited.add(gateId);
-      result.unshift(gateId);
+      result.push(gateId);
     };
 
     this.gates.forEach((_, id) => visit(id));

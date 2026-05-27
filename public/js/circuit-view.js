@@ -41,9 +41,14 @@ class CircuitView {
 
     ctx.save();
     
-    ctx.fillStyle = output ? '#4ade80' : '#64748b';
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 2;
+    ctx.fillStyle = output ? '#22c55e' : '#64748b';
+    ctx.strokeStyle = output ? '#16a34a' : '#1e293b';
+    ctx.lineWidth = output ? 4 : 2;
+
+    if (output) {
+      ctx.shadowColor = '#22c55e';
+      ctx.shadowBlur = 15;
+    }
 
     switch (gate.type) {
       case 'INPUT':
@@ -75,11 +80,18 @@ class CircuitView {
         ctx.strokeRect(x, y, w, h);
     }
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(gate.type, x + w / 2, y + h / 2);
+    if (gate.type !== 'INPUT' && gate.type !== 'OUTPUT') {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(gate.type, x + w / 2, y + h / 2 - 6);
+
+      ctx.font = 'bold 14px Arial';
+      ctx.fillStyle = output ? '#fef08a' : '#e2e8f0';
+      ctx.fillText(output ? '1' : '0', x + w / 2, y + h / 2 + 10);
+    }
 
     this.drawPorts(gate);
 
@@ -91,10 +103,17 @@ class CircuitView {
     const value = gate.value || 0;
     
     ctx.fillStyle = value ? '#22c55e' : '#64748b';
+    ctx.strokeStyle = value ? '#16a34a' : '#1e293b';
+    ctx.lineWidth = value ? 4 : 2;
+    if (value) {
+      ctx.shadowColor = '#22c55e';
+      ctx.shadowBlur = 15;
+    }
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, 8);
     ctx.fill();
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 14px Arial';
@@ -107,10 +126,17 @@ class CircuitView {
     const ctx = this.ctx;
     
     ctx.fillStyle = output ? '#22c55e' : '#64748b';
+    ctx.strokeStyle = output ? '#16a34a' : '#1e293b';
+    ctx.lineWidth = output ? 4 : 2;
+    if (output) {
+      ctx.shadowColor = '#22c55e';
+      ctx.shadowBlur = 15;
+    }
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, 8);
     ctx.fill();
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 14px Arial';
