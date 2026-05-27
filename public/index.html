@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台球物理推演 - 手写连续碰撞检测引擎</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #ddd;
+    font-family: 'Consolas', 'Courier New', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 22px;
+    margin-bottom: 12px;
+    color: #4fd1c5;
+    letter-spacing: 2px;
+  }
+  .info {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 10px;
+  }
+  #gameWrap {
+    position: relative;
+    border: 4px solid #2d3748;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(79, 209, 197, 0.3);
+  }
+  canvas { display: block; }
+  .controls {
+    margin-top: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  button {
+    background: #2d3748;
+    color: #4fd1c5;
+    border: 1px solid #4fd1c5;
+    padding: 8px 18px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+  button:hover {
+    background: #4fd1c5;
+    color: #0a0a0a;
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  label {
+    font-size: 12px;
+    color: #888;
+  }
+  input[type="range"] {
+    vertical-align: middle;
+  }
+  .stats {
+    font-size: 11px;
+    color: #666;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+  <h1>BILLIARDS PHYSICS SIMULATION</h1>
+  <div class="info">手写 CCD 物理引擎 | 多球同时碰撞动量守恒 | 摩擦力衰减 | 防穿模反弹</div>
+  <div id="gameWrap">
+    <canvas id="gameCanvas" width="900" height="500"></canvas>
+  </div>
+  <div class="controls">
+    <button id="breakBtn">开球 (Break)</button>
+    <button id="resetBtn">重置 (Reset)</button>
+    <label>母球初速度: <input id="power" type="range" min="100" max="1200" value="700"></label>
+  </div>
+  <div class="stats" id="statsText">等待初始数据...</div>
+
+  <script src="js/physics.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
