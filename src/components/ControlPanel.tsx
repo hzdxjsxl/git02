@@ -25,7 +25,7 @@ export const ControlPanel = () => {
           <input
             type="range"
             min="50"
-            max="200"
+            max="100"
             step="10"
             value={settings.gridSize}
             onChange={(e) =>
@@ -37,8 +37,12 @@ export const ControlPanel = () => {
           />
           <div className="flex justify-between text-xs text-gray-400 mt-1">
             <span>50</span>
-            <span>200</span>
+            <span className="text-primary/60">最大 100</span>
           </div>
+          <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400"></span>
+            限制在 100x100 以内确保计算流畅
+          </p>
         </div>
 
         <div className="border-t border-gray-100 pt-4">

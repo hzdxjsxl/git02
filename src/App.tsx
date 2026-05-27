@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { UploadArea } from "./components/UploadArea";
 import { ControlPanel } from "./components/ControlPanel";
 import { PreviewCanvas } from "./components/PreviewCanvas";
@@ -6,11 +6,19 @@ import { ColorPanel } from "./components/ColorPanel";
 import { PathPanel } from "./components/PathPanel";
 import { ExportPanel } from "./components/ExportPanel";
 import { useAppStore } from "./store/appStore";
-import { Wand2, Sparkles, RotateCcw } from "lucide-react";
+import { Wand2, Sparkles, RotateCcw, Zap } from "lucide-react";
+import { pathWorker } from "./workers/pathWorkerManager";
 
 function App() {
-  const { originalImage, quantizeResult, isProcessing, reset } = useAppStore();
+  const { originalImage, quantizeResult, gridResult, isProcessing, reset } = useAppStore();
   const [showUpload, setShowUpload] = useState(!originalImage);
+  const [processingStartTime, setProcessingStartTime] = useState<number>(0);
+
+  useEffect(() => {
+    return () => {
+      pathWorker.terminate();
+    };
+  }, []);
 
   const handleUploadComplete = useCallback(() => {
     setShowUpload(false);
@@ -23,37 +31,64 @@ function App() {
 
     setProcessing(true);
     setProgress(0, "开始处理...");
+    setProcessingStartTime(Date.now());
+    const overallStartTime = Date.now();
 
     try {
+      const quantizeColorsStartTime = Date.now();
       const { quantizeColors } = await import("./utils/colorQuantizer");
       const quantize = quantizeColors(originalImageData, 20, 30, (p, t) => {
-        setProgress(p * 0.5, t);
+        setProgress(p * 0.4, t);
       });
+      console.log(`颜色量化耗时: ${Date.now() - quantizeColorsStartTime}ms`);
 
       setQuantizeResult(quantize);
-      setProgress(50, "网格化处理...");
+      setProgress(40, "网格化处理...");
 
+      const gridProcessStartTime = Date.now();
       const { processGrid } = await import("./utils/gridProcessor");
       const grid = processGrid(quantize, settings.gridSize, (p, t) => {
-        setProgress(50 + p * 0.3, t);
+        setProgress(40 + p * 0.3, t);
       });
+      console.log(`网格化处理耗时: ${Date.now() - gridProcessStartTime}ms`);
 
       setGridResult(grid);
-      setProgress(80, "计算路径...");
+      setProgress(70, "后台计算路径中...");
 
-      const { findPaths } = await import("./utils/pathFinder");
-      const pathResults = findPaths(grid, quantize.palette.length, (p, t) => {
-        setProgress(80 + p * 0.2, t);
+      const pathCalcStartTime = Date.now();
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("路径计算超时"));
+        }, 30000);
+
+        pathWorker.calculatePaths(
+          grid,
+          quantize.palette.length,
+          (p, t) => {
+            setProgress(70 + p * 0.3, t);
+          },
+          (paths) => {
+            clearTimeout(timeout);
+            setPaths(paths);
+            resolve();
+          },
+          (error) => {
+            clearTimeout(timeout);
+            reject(error);
+          }
+        );
       });
+      console.log(`路径计算耗时: ${Date.now() - pathCalcStartTime}ms`);
 
-      setPaths(pathResults);
-      setProgress(100, "处理完成！");
+      const totalTime = ((Date.now() - overallStartTime) / 1000).toFixed(2);
+      setProgress(100, `处理完成！总耗时 ${totalTime} 秒`);
 
-      setTimeout(() => setProcessing(false), 500);
+      setTimeout(() => setProcessing(false), 800);
     } catch (error) {
       console.error("处理失败:", error);
       setProcessing(false);
-      alert("处理失败，请重试");
+      setProgress(0, "处理失败，请重试");
+      alert(`处理失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, []);
 
@@ -104,11 +139,17 @@ function App() {
                     <p className="text-xs text-gray-600">20色量化</p>
                   </div>
                   <div className="p-3 rounded-xl bg-white">
-                    <div className="w-8 h-8 mx-auto mb-2 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Wand2 className="w-4 h-4 text-primary" />
+                    <div className="w-8 h-8 mx-auto mb-2 rounded-lg bg-green-500/10 flex items-center justify-center">
+                      <Zap className="w-4 h-4 text-green-500" />
                     </div>
-                    <p className="text-xs text-gray-600">路径优化</p>
+                    <p className="text-xs text-gray-600">极速运算</p>
                   </div>
+                </div>
+                <div className="mt-4 p-3 rounded-lg bg-green-50 border border-green-200">
+                  <p className="text-xs text-green-700 flex items-center gap-2">
+                    <Zap className="w-4 h-4" />
+                    <span><strong>性能优化：</strong>路径计算采用独立线程，界面永不卡顿</span>
+                  </p>
                 </div>
               </div>
             </div>
