@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>家族族谱排版系统</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>家族族谱排版系统</h1>
+      <div class="controls">
+        <button id="loadBtn">加载族谱数据</button>
+        <button id="zoomIn">放大</button>
+        <button id="zoomOut">缩小</button>
+        <button id="resetView">重置视图</button>
+        <span id="stats"></span>
+      </div>
+    </header>
+    
+    <div class="canvas-container" id="canvasContainer">
+      <canvas id="treeCanvas"></canvas>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+    
+    <div class="legend">
+      <div class="legend-item">
+        <span class="legend-color male"></span>
+        <span>男性</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color female"></span>
+        <span>女性</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color marriage"></span>
+        <span>婚姻关系</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color parent"></span>
+        <span>亲子关系</span>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
