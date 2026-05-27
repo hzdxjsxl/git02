@@ -1,0 +1,13 @@
+{
+  "name": "ocr-correction-web",
+  "version": "1.0.0",
+  "description": "OCR 文字识别结果人工纠错网页，支持拖拽识别框并自动吸附到文字边缘",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

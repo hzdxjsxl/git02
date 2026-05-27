@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>OCR 识别结果人工纠错</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <h1>OCR 识别结果人工纠错</h1>
+      <div class="controls">
+        <label><input type="checkbox" id="snapToggle" checked /> 启用边缘吸附</label>
+        <label>吸附半径 <input type="number" id="snapRadius" value="30" min="5" max="80" /> px</label>
+        <label>灰度阈值 <input type="number" id="snapThreshold" value="35" min="5" max="200" /></label>
+        <button id="resetBtn">重置</button>
+        <button id="saveBtn">导出纠错结果</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="canvas-wrap">
+        <canvas id="stage"></canvas>
+        <div class="hint" id="hint">提示：拖拽四角靠近文字边缘即可自动吸附；按住边框可整体平移。</div>
+      </section>
+
+      <aside class="sidebar">
+        <h3>识别框列表</h3>
+        <div id="boxList" class="box-list"></div>
+        <pre id="output" class="output"></pre>
+      </aside>
+    </main>
+  </div>
+
+  <script src="snap.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
